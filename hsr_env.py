@@ -138,10 +138,9 @@ class HSREnv:
         self.object_collision, self.furniture_collision = False, False
         self.break_collision = False
 
-        # print(self.robot.get_joint_infos())
-
     def close(self):
         p.disconnect(self.c_direct)
+        p.disconnect(self.c_gui)
 
     def reset(self):
         self.c_gui.resetSimulation()
@@ -1338,3 +1337,11 @@ def setup_object(client, id, coll_ids, area, tries=10):
             return True
 
     return False
+
+
+if __name__ == "__main__":
+    hsr_env = HSREnv()
+
+    while True:
+        time.sleep(0.01)
+        hsr_env.stepSimulation()
