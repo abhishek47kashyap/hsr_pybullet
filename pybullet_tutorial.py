@@ -40,13 +40,6 @@ def main():
         forces=np.zeros(n_joints),
     )
 
-    # pos_noise = 0.1
-    # rot_noise = np.pi / 180 * 5
-    # x = p.loadSDF('tmc_wrs_gazebo/tmc_wrs_gazebo_worlds/models/wrc_bookshelf/model.sdf')[0]
-    # p.resetBasePositionAndOrientation(x, (2.7 + np.random.uniform(-1, 1) * pos_noise, -1 + np.random.uniform(-1, 1) * pos_noise, 0),
-    #                                             p.getQuaternionFromEuler(
-    #                                                 [0, 0, -1.57 + np.random.uniform(-1, 1) * rot_noise]))
-
     model_name = "007_tuna_fish_can"
     mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
     collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
@@ -84,9 +77,27 @@ def main():
 
     p.setGravity(0, 0, -10)
 
+    width = 128
+    height = 128
+
+    fov = 60
+    aspect = width / height
+    near = 0.02
+    far = 1
+    view_matrix = p.computeViewMatrix([0, 0, 0.5], [0, 0, 0], [1, 0, 0])
+    projection_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
 
 
     while True:
+        # Get depth values using the OpenGL renderer
+        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+        depth_buffer_opengl = np.reshape(images[3], [width, height])
+        depth_opengl = far * near / (far - (far - near) * depth_buffer_opengl)
+        # Get depth values using Tiny renderer
+        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_TINY_RENDERER)
+        depth_buffer_tiny = np.reshape(images[3], [width, height])
+        depth_tiny = far * near / (far - (far - near) * depth_buffer_tiny)
+
         time.sleep(0.01)
 
         p.stepSimulation()
