@@ -1,19 +1,63 @@
+"""
+Ref:
+- https://towardsdatascience.com/simulate-images-for-ml-in-pybullet-the-quick-easy-way-859035b2c9dd
+"""
+
 import time
 
 import numpy as np
-import pybullet as p
-import pybullet_data
 import trimesh
 
-P_GAIN = 50
+import pybullet as p
+import pybulletX as px
+import pybullet_data
+import pybullet_utils.bullet_client as bc
+
+CAMERA_XTION_CONFIG = [{
+    'image_size': (480, 640),
+    'intrinsics': (537.4933389299223, 0.0, 319.9746375212718, 0.0, 536.5961755975517, 244.54846607953, 0.0, 0.0, 1.0),
+    'position': None,
+    'rotation': None,
+    'zrange': (0.5, 10.),
+    'noise': False
+}]
+
+CAMERA_REALSENSE_CONFIG = [{
+    'image_size': (480, 640),
+    'intrinsics': (
+    607.3814086914062, 0.0, 315.9123840332031, 0.0, 607.2514038085938, 233.77308654785156, 0.0, 0.0, 1.0),
+    'position': None,
+    'rotation': None,
+    'zrange': (0.3, 10.),
+    'noise': False
+}]
+
+hand = True   # if false, CAMERA_XTION_CONFIG config will be used
 
 def main():
-    c_gui = p.connect(p.GUI)
+    urdf_file_path = "hsrb_description/robots/hsrb.urdf"
+    use_fixed_base = True
+    connection_mode = p.GUI
+
+    pybullet_client_gui = p.connect(connection_mode)
+    # bullet_client_gui = bc.BulletClient(connection_mode=connection_mode)
+
+    # px_gui = px.Client(client_id=bullet_client_gui._client)
+
+    # robot = px.Robot(
+    #     urdf_file_path,
+    #     use_fixed_base=use_fixed_base,
+    #     physics_client=px_gui
+    #     )
 
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.loadURDF("plane.urdf")
 
-    robot_body_unique_id = robot_id = p.loadURDF("hsrb_description/robots/hsrb.urdf", useFixedBase=True, flags=p.URDF_USE_SELF_COLLISION)
+    robot_body_unique_id = robot_id = p.loadURDF(
+        urdf_file_path,
+        useFixedBase=use_fixed_base,
+        flags=p.URDF_USE_SELF_COLLISION
+        )
 
     n_joints = p.getNumJoints(robot_id)
     joints = [p.getJointInfo(robot_id, i) for i in range(n_joints)]
@@ -48,14 +92,14 @@ def main():
     scale = 1
     scale = [scale, scale, scale]
 
-    viz_shape_id = p.createVisualShape(
+    visual_shape_id = p.createVisualShape(
         shapeType=p.GEOM_MESH,
         rgbaColor=[1, 0, 0, 1],
         specularColor=[0.4, .4, 0],
         fileName=mesh_path, meshScale=scale,
         visualFramePosition=-centroid,
     )
-    col_shape_id = p.createCollisionShape(
+    collision_shape_id = p.createCollisionShape(
         shapeType=p.GEOM_MESH,
         fileName=collision_path, meshScale=scale,
         collisionFramePosition=-centroid,
@@ -64,15 +108,16 @@ def main():
     obj_id = p.createMultiBody(
         baseMass=mesh.mass,
         basePosition=(1.0, 0, 0),
-        baseCollisionShapeIndex=col_shape_id,
-        baseVisualShapeIndex=viz_shape_id,
         baseOrientation=(0, 0, 0, 1),
+        baseCollisionShapeIndex=collision_shape_id,
+        baseVisualShapeIndex=visual_shape_id,
         baseInertialFramePosition=np.array(mesh.center_mass - centroid),
     )
 
     p.changeDynamics(obj_id, -1, lateralFriction=0.25)
+    p.setGravity(0, 0, -9.8)
 
-    p.setGravity(0, 0, -10)
+
 
     width = 128
     height = 128
@@ -81,10 +126,13 @@ def main():
     aspect = width / height
     near = 0.02
     far = 1
-    view_matrix = p.computeViewMatrix([0, 0, 0.5], [0, 0, 0], [1, 0, 0])
+    view_matrix = p.computeViewMatrix(
+        cameraEyePosition=[0, 0, 0.5],
+        cameraTargetPosition=[0, 0, 0],
+        cameraUpVector=[1, 0, 0]
+        )
     projection_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
     renderer = p.ER_BULLET_HARDWARE_OPENGL   # or p.ER_TINY_RENDERER
-
 
     while True:
         images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=renderer)
