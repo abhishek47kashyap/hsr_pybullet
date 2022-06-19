@@ -83,11 +83,11 @@ def main():
     far = 1
     view_matrix = p.computeViewMatrix([0, 0, 0.5], [0, 0, 0], [1, 0, 0])
     projection_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
+    renderer = p.ER_BULLET_HARDWARE_OPENGL   # or p.ER_TINY_RENDERER
 
 
     while True:
-        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL) # Get depth values using the OpenGL renderer
-        # images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_TINY_RENDERER)    # Get depth values using Tiny renderer
+        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=renderer)
         depth_buffer_opengl = np.reshape(images[3], [width, height])
         depth_opengl = far * near / (far - (far - near) * depth_buffer_opengl)
 
