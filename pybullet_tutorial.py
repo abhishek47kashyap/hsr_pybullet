@@ -5,10 +5,7 @@ import pybullet as p
 import pybullet_data
 import trimesh
 
-# import env_utils as eu
-
 P_GAIN = 50
-# desired_joint_positions = np.array([1.218, 0.507, -0.187, 1.235, 0.999, 1.279, 0])
 
 def main():
     c_gui = p.connect(p.GUI)
@@ -89,14 +86,10 @@ def main():
 
 
     while True:
-        # Get depth values using the OpenGL renderer
-        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL) # Get depth values using the OpenGL renderer
+        # images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_TINY_RENDERER)    # Get depth values using Tiny renderer
         depth_buffer_opengl = np.reshape(images[3], [width, height])
         depth_opengl = far * near / (far - (far - near) * depth_buffer_opengl)
-        # Get depth values using Tiny renderer
-        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=p.ER_TINY_RENDERER)
-        depth_buffer_tiny = np.reshape(images[3], [width, height])
-        depth_tiny = far * near / (far - (far - near) * depth_buffer_tiny)
 
         time.sleep(0.01)
 
