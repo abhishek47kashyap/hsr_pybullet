@@ -7,6 +7,7 @@ import time
 from copy import deepcopy
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 import trimesh
 
 import pybullet as p
@@ -31,7 +32,7 @@ CAMERA_REALSENSE_CONFIG = {
     'noise': False
 }
 
-hand = True   # if false, CAMERA_XTION_CONFIG config will be used
+hand = False   # if false, CAMERA_XTION_CONFIG config will be used
 
 def main():
     urdf_file_path = "hsrb_description/robots/hsrb.urdf"
@@ -120,16 +121,6 @@ def main():
     width = 128
     height = 128
 
-    fov = 60
-    aspect = width / height
-    near = 0.02
-    far = 1
-    view_matrix = p.computeViewMatrix(
-        cameraEyePosition=[0, 0, 0.5],
-        cameraTargetPosition=[0, 0, 0],
-        cameraUpVector=[1, 0, 0]
-        )
-    projection_matrix = p.computeProjectionMatrixFOV(fov, aspect, near, far)
     renderer = p.ER_BULLET_HARDWARE_OPENGL   # or p.ER_TINY_RENDERER
 
     first_iteration = True
@@ -147,6 +138,8 @@ def main():
         camera_config["position"] = list(camera_link_position)
         camera_config["orientation"] = list(camera_link_orientation)
 
+        camera_config["orientation"] = (R.from_quat(camera_config["orientation"]) * R.from_euler('YZ', [0.5 * np.pi, -0.5 * np.pi])).as_quat()
+
         if first_iteration:
             first_iteration = False
             print(f"{camera_joint_frame} info:")
@@ -155,14 +148,39 @@ def main():
 
             print("Camera config:")
             print(camera_config)
+        
+        # OpenGL camera settings.
+        lookdir = np.float32([0, 0, 1]).reshape(3, 1)
+        updir = np.float32([0, -1, 0]).reshape(3, 1)
 
+        rotm = p.getMatrixFromQuaternion(camera_config['orientation'])
+        rotm = np.float32(rotm).reshape(3, 3)
+        lookdir = (rotm @ lookdir).reshape(-1)
+        lookat = camera_config['position'] + lookdir
+        updir = (rotm @ updir).reshape(-1)
 
-        images = p.getCameraImage(width, height, view_matrix, projection_matrix, renderer=renderer)
-        depth_buffer_opengl = np.reshape(images[3], [width, height])
-        depth_opengl = far * near / (far - (far - near) * depth_buffer_opengl)
+        focal_len = camera_config['intrinsics'][0]
+        znear, zfar = camera_config['zrange']
+        viewm = p.computeViewMatrix(camera_config['position'], lookat, updir)
+
+        fovh = (camera_config['image_size'][0] / 2) / focal_len
+        fovh = 180 * np.arctan(fovh) * 2 / np.pi
+
+        # Notes: 1) FOV is vertical FOV 2) aspect must be float
+        aspect_ratio = camera_config['image_size'][1] / camera_config['image_size'][0]
+        projm = p.computeProjectionMatrixFOV(fovh, aspect_ratio, znear, zfar)
+
+        images = p.getCameraImage(
+            camera_config["image_size"][1],
+            camera_config['image_size'][0], 
+            viewMatrix=viewm,
+            projectionMatrix=projm, 
+            shadow=0,
+            flags=p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX,
+            renderer=renderer
+            )
 
         time.sleep(0.01)
-
         p.stepSimulation()
 
 if __name__ == "__main__":
