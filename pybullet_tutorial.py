@@ -34,6 +34,30 @@ CAMERA_REALSENSE_CONFIG = {
 
 hand = False   # if false, CAMERA_XTION_CONFIG config will be used
 
+def get_view_matrix(camera_config: dict):
+    # OpenGL camera settings.
+    lookdir = np.float32([0, 0, 1]).reshape(3, 1)
+    updir = np.float32([0, -1, 0]).reshape(3, 1)
+
+    rotm = p.getMatrixFromQuaternion(camera_config['orientation'])
+    rotm = np.float32(rotm).reshape(3, 3)
+    lookdir = (rotm @ lookdir).reshape(-1)
+    lookat = camera_config['position'] + lookdir
+    updir = (rotm @ updir).reshape(-1)
+
+    return p.computeViewMatrix(camera_config['position'], lookat, updir)
+
+def get_projection_matrix(camera_config: dict):
+    focal_len = camera_config['intrinsics'][0]
+    fovh = (camera_config['image_size'][0] / 2) / focal_len
+    fovh = 180 * np.arctan(fovh) * 2 / np.pi
+
+    # Notes: 1) FOV is vertical FOV 2) aspect must be float
+    znear, zfar = camera_config['zrange']
+    aspect_ratio = camera_config['image_size'][1] / camera_config['image_size'][0]
+
+    return p.computeProjectionMatrixFOV(fovh, aspect_ratio, znear, zfar)
+
 def main():
     urdf_file_path = "hsrb_description/robots/hsrb.urdf"
     use_fixed_base = True
@@ -118,9 +142,6 @@ def main():
     p.changeDynamics(obj_id, -1, lateralFriction=0.25)
     p.setGravity(0, 0, -9.8)
 
-    width = 128
-    height = 128
-
     renderer = p.ER_BULLET_HARDWARE_OPENGL   # or p.ER_TINY_RENDERER
 
     first_iteration = True
@@ -148,33 +169,12 @@ def main():
 
             print("Camera config:")
             print(camera_config)
-        
-        # OpenGL camera settings.
-        lookdir = np.float32([0, 0, 1]).reshape(3, 1)
-        updir = np.float32([0, -1, 0]).reshape(3, 1)
-
-        rotm = p.getMatrixFromQuaternion(camera_config['orientation'])
-        rotm = np.float32(rotm).reshape(3, 3)
-        lookdir = (rotm @ lookdir).reshape(-1)
-        lookat = camera_config['position'] + lookdir
-        updir = (rotm @ updir).reshape(-1)
-
-        focal_len = camera_config['intrinsics'][0]
-        znear, zfar = camera_config['zrange']
-        viewm = p.computeViewMatrix(camera_config['position'], lookat, updir)
-
-        fovh = (camera_config['image_size'][0] / 2) / focal_len
-        fovh = 180 * np.arctan(fovh) * 2 / np.pi
-
-        # Notes: 1) FOV is vertical FOV 2) aspect must be float
-        aspect_ratio = camera_config['image_size'][1] / camera_config['image_size'][0]
-        projm = p.computeProjectionMatrixFOV(fovh, aspect_ratio, znear, zfar)
 
         images = p.getCameraImage(
             camera_config["image_size"][1],
             camera_config['image_size'][0], 
-            viewMatrix=viewm,
-            projectionMatrix=projm, 
+            viewMatrix=get_view_matrix(deepcopy(camera_config)),
+            projectionMatrix=get_projection_matrix(deepcopy(camera_config)),
             shadow=0,
             flags=p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX,
             renderer=renderer
