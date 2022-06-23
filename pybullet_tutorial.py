@@ -170,7 +170,7 @@ def main():
             print("Camera config:")
             print(camera_config)
 
-        images = p.getCameraImage(
+        width, height, rgb_img, depth_img, seg_img = p.getCameraImage(
             camera_config["image_size"][1],
             camera_config['image_size'][0], 
             viewMatrix=get_view_matrix(deepcopy(camera_config)),
