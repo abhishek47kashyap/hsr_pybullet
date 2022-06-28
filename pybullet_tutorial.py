@@ -71,14 +71,14 @@ def main():
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.loadURDF("plane.urdf")
 
-    robot_body_unique_id = robot_id = p.loadURDF(
+    robot_body_unique_id = p.loadURDF(
         urdf_file_path,
         useFixedBase=use_fixed_base,
         flags=p.URDF_USE_SELF_COLLISION
         )
 
-    n_joints = p.getNumJoints(robot_id)
-    joints = [p.getJointInfo(robot_id, i) for i in range(n_joints)]
+    n_joints = p.getNumJoints(robot_body_unique_id)
+    joints = [p.getJointInfo(robot_body_unique_id, i) for i in range(n_joints)]
     joint_indices = range(n_joints)
 
     print("Joint information:")
@@ -100,7 +100,7 @@ def main():
 
     # The magic that enables torque control
     p.setJointMotorControlArray(
-        bodyIndex=robot_id,
+        bodyIndex=robot_body_unique_id,
         jointIndices=joint_indices,
         controlMode=p.TORQUE_CONTROL,
         forces=np.zeros(n_joints),
