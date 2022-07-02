@@ -98,6 +98,11 @@ def main():
     if not camera_link_idx:
         print(f"Camera link index not found for frame named {camera_joint_frame}")
 
+    joint_states = p.getJointStates(robot_body_unique_id, range(n_joints), pybullet_client)
+    print("\nJoint values as obtained from p.getJointStates():")
+    print(joint_states)
+    print()
+
     # The magic that enables torque control
     p.setJointMotorControlArray(
         bodyIndex=robot_body_unique_id,
