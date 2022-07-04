@@ -142,7 +142,13 @@ def main():
     bullet_client.setAdditionalSearchPath(pybullet_data.getDataPath())
     bullet_client.loadURDF("plane.urdf")
 
-    robot_body_unique_id = px.Robot(urdf_file_path, use_fixed_base=use_fixed_base, physics_client=px_client, base_position=[0.0, 0.0, 0.0], flags=p.URDF_USE_SELF_COLLISION)
+    robot_body_unique_id = px.Robot(
+        urdf_file_path,
+        use_fixed_base=use_fixed_base,
+        physics_client=px_client,
+        base_position=[0.0, 0.0, 0.0],
+        flags=p.URDF_USE_SELF_COLLISION
+        )
     robot_body_unique_id.torque_control = True
 
     n_joints = robot_body_unique_id.num_joints
