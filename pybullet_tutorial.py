@@ -70,6 +70,18 @@ def get_all_joint_values(robot_body_unique_id, verbose=False):
 
     return joint_values
 
+def get_joint_limits(robot_body_unique_id, verbose=False):
+    joint_infos = robot_body_unique_id.get_joint_infos()
+    joint_lower_limits = joint_infos["joint_lower_limit"]
+    joint_upper_limits = joint_infos["joint_upper_limit"]
+
+    if verbose:
+        print("Joint limits:")
+        for name, lower, upper in zip(all_joint_names, joint_lower_limits, joint_upper_limits):
+            print(f"\t{name}: [{lower}, {upper}]")
+
+    return joint_lower_limits, joint_upper_limits
+
 
 CAMERA_XTION_CONFIG = {
     'image_size': (480, 640),
@@ -133,6 +145,10 @@ def main():
     robot_body_unique_id = px.Robot(urdf_file_path, use_fixed_base=use_fixed_base, physics_client=px_client, base_position=[0.0, 0.0, 0.0])
     robot_body_unique_id.torque_control = True
 
+    n_joints = robot_body_unique_id.num_joints
+    n_dofs = robot_body_unique_id.num_dofs
+    print(f"Number of joints: {n_joints}, number of dofs: {n_dofs}")
+    joint_lower_limits, joint_upper_limits = get_joint_limits(robot_body_unique_id)
 
     model_name = "007_tuna_fish_can"
     mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
