@@ -4,6 +4,9 @@ Ref:
 - https://towardsdatascience.com/beginners-guide-to-custom-environments-in-openai-s-gym-989371673952
 - https://medium.com/cloudcraftz/build-a-custom-environment-using-openai-gym-for-reinforcement-learning-56d7a5aa827b
 - https://github.com/openai/gym/blob/master/gym/envs/box2d/bipedal_walker.py
+- Creating OpenAI Gym Environments with PyBullet;
+    - https://gerardmaggiolino.medium.com/creating-openai-gym-environments-with-pybullet-part-1-13895a622b24
+    - https://gerardmaggiolino.medium.com/creating-openai-gym-environments-with-pybullet-part-2-a1441b9a4d8e
 """
 
 import gym
@@ -126,7 +129,10 @@ class HsrPybulletEnv(gym.Env):
         self.add_object_to_scene(model_name="007_tuna_fish_can")
 
         self.spin()
-    
+
+    def close(self):
+        self.px_client.release()
+
     def step(self, action):
         ...
     
