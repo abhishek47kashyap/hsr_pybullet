@@ -213,7 +213,7 @@ class HsrPybulletEnv(gym.Env):
         return np.linalg.norm(q1 - q2)   # order of q is the same as all_joint_names
     
     def get_base_error(self, q1, q2):
-        return np.linalg.norm(q1[:2] - q2[:2])   # order of q is the same as all_joint_names
+        return np.linalg.norm(q1[:3] - q2[:3])   # order of q is the same as all_joint_names
     
     def spin(self):
         while True:
