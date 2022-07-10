@@ -90,7 +90,7 @@ class HsrPybulletEnv(gym.Env):
         self.connection_mode = p.GUI
         hand = False
 
-        self.error_tolerance = 0.6
+        self.error_tolerance = 1.0
         self.max_time_to_reach_goal = 20  # seconds allowed to reach goal
 
         self.camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
@@ -134,14 +134,21 @@ class HsrPybulletEnv(gym.Env):
         self.add_object_to_scene(model_name="007_tuna_fish_can")
 
         # print(f"Checking for existence of addUserDebugLine: {self.bullet_client.addUserDebugLine}")
-        # random_action = self.action_space.sample()
-        random_action = [-0.30553615, -3.0663216, -8.185578, 0.07727123, -0.56605875, -0.44894674, 0.06767046, -1.6455808, 0.16513418, -0.85248154, -1.7382416, 0.15633392, -0.7695309, 0.39886168, -0.03402488]
+        # random_action = self.get_random_joint_config()
+        # random_action = [-0.30553615, -3.0663216, -8.185578, 0.07727123, -0.56605875, -0.44894674, 0.06767046, -1.6455808, 0.16513418, -0.85248154, -1.7382416, 0.15633392, -0.7695309, 0.39886168, -0.03402488]
+        # random_action = [-5.0677767, -9.812688,  -3.4465344, 0.34411412, -1.1459529, -0.9748333, 0.23610148, -2.1307828, -0.70618105, -0.8699218, 1.338886, -0.77597266, -0.3975988, -0.58280176, 0.685311]
         # random_action = self.get_joint_values()
         # random_action[0] = 5.0
         # random_action[1] = 5.0
-        print(f"Sample action: {random_action}, will apply in 2 seconds")
-        time.sleep(2)
-        self.step(random_action)
+        # print(f"Sample action: {random_action}")
+        # time.sleep(2)
+        # self.step(random_action)
+
+        N = 3
+        for i in range(N):
+            random_action = self.get_random_joint_config()
+            print(f"Sample action {i+1}/{N}: {random_action}")
+            self.step(random_action)
 
         # self.spin()
 
@@ -150,6 +157,9 @@ class HsrPybulletEnv(gym.Env):
 
     def step(self, action: list):
         self.set_joint_position(action)
+    
+    def get_random_joint_config(self):
+        return self.action_space.sample()
     
     def set_joint_position(self, q):
         if len(q) != self.num_dofs:
@@ -161,13 +171,38 @@ class HsrPybulletEnv(gym.Env):
 
         line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=10.0)
         
-        print("Will set_joint_position now..")
-        self.robot_body_unique_id.set_joint_position(
-            q,
-            max_forces=self.joint_max_forces,
-            use_joint_effort_limits=True
+        self.bullet_client.setJointMotorControlArray(
+            bodyUniqueId=self.robot_body_unique_id.id,
+            jointIndices=self.free_joint_indices,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=q,
+            targetVelocities=np.zeros_like(q)
         )
-        print("done")
+
+        # sluggish (code from Yuki's version)
+        # current_joint_values = self.get_joint_values()
+        # time_for_base = np.max([abs(q[i] - current_joint_values[i]) / self.joint_max_velocities[i] for i in [0, 1, 2]])
+        # max_velocities = deepcopy(self.joint_max_velocities)
+        # for i in range(3):   # first 3 joints that correspond to base XY position and yaw orientation
+        #     max_velocities[i] = abs(q[i] - current_joint_values[i]) / time_for_base
+        # for i in range(len(all_joint_names)):
+        #     target_velocity = max_velocities[i] if (time_for_base >  0 and i <= 2) else 0.0
+        #     self.bullet_client.setJointMotorControl2(
+        #         bodyUniqueId=self.robot_body_unique_id.id,
+        #         jointIndex=self.free_joint_indices[i],
+        #         controlMode=p.POSITION_CONTROL,
+        #         targetPosition=q[i],
+        #         targetVelocity=target_velocity,
+        #         force=self.joint_max_forces[i],
+        #         maxVelocity=max_velocities[i]
+        #     )
+
+        # pybulletX's robot.set_joint_position() causes base to overshoot, not sure why
+        # self.robot_body_unique_id.set_joint_position(
+        #     q,
+        #     max_forces=self.joint_max_forces,
+        #     use_joint_effort_limits=True
+        # )
 
         start_time = time.time()
         error = self.get_error(q, self.get_joint_values())
@@ -190,8 +225,11 @@ class HsrPybulletEnv(gym.Env):
             if time.time() - base_log_start > base_log_freq:
                 base_log_start = time.time()
                 print("Currently:")
-                print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values())}")
-                print(f"\tJoint values: {self.get_joint_values()}")
+                print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values())}, all joint error: {error}")
+                current_joint_values = self.get_joint_values()
+                print(f"\tJoint values:")
+                for i in range(len(all_joint_names)):
+                    print(f"\t\t{all_joint_names[i]}: {current_joint_values[i]:.4f} (target: {q[i]:.4f}, error: {q[i] - current_joint_values[i]:.4f})")
 
             time.sleep(0.01)
             self.bullet_client.stepSimulation()
@@ -199,9 +237,6 @@ class HsrPybulletEnv(gym.Env):
             base_velocity = np.linalg.norm(self.get_base_velocity())
 
         self.bullet_client.removeUserDebugItem(line_id)
-        print("Removed User Debug Line, will sleep for 5 seconds")
-        time.sleep(5.0)
-        print("Done") 
     
     def reset(self):
         self.robot_body_unique_id.reset()
@@ -209,8 +244,22 @@ class HsrPybulletEnv(gym.Env):
     def render(self, mode="human", close=False):
         ...
 
-    def get_error(self, q1, q2):
-        return np.linalg.norm(q1 - q2)   # order of q is the same as all_joint_names
+    def get_error(self, q1, q2, ignore_hand_joints=True):
+        """
+        These last 4 joints which are on the gripper never quite seem to reach target positions:
+        - hand_l_proximal_joint
+        - hand_l_distal_joint
+        - hand_r_proximal_joint
+        - hand_r_distal_joint
+        (run "roslaunch hsrb_description hsrb_display.launch" to inspect)
+
+        ignore_hand_joints: if True, the hand joints are ignored in the error calculation
+        """
+
+        if ignore_hand_joints:
+            return np.linalg.norm(q1[:-4] - q2[:-4])   # order of q is the same as all_joint_names
+        else:
+            return np.linalg.norm(q1 - q2)   # order of q is the same as all_joint_names
     
     def get_base_error(self, q1, q2):
         return np.linalg.norm(q1[:3] - q2[:3])   # order of q is the same as all_joint_names
