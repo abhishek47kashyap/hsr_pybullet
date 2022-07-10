@@ -90,6 +90,9 @@ class HsrPybulletEnv(gym.Env):
         self.connection_mode = p.GUI
         hand = False
 
+        self.error_tolerance = 0.6
+        self.max_time_to_reach_goal = 20  # seconds allowed to reach goal
+
         self.camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
         self.camera_config = deepcopy(CAMERA_REALSENSE_CONFIG if hand else CAMERA_XTION_CONFIG)
 
@@ -115,7 +118,9 @@ class HsrPybulletEnv(gym.Env):
         self.num_joints = self.robot_body_unique_id.num_joints
         self.num_dofs = self.robot_body_unique_id.num_dofs
 
+        self.free_joint_indices = self.robot_body_unique_id.free_joint_indices
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
+        self.joint_max_velocities, self.joint_max_forces = self.get_joint_max_velocities_and_forces()
 
         self.action_space = spaces.Box(
             np.array(self.joint_limits_lower).astype(np.float32),
@@ -128,13 +133,75 @@ class HsrPybulletEnv(gym.Env):
 
         self.add_object_to_scene(model_name="007_tuna_fish_can")
 
-        self.spin()
+        # print(f"Checking for existence of addUserDebugLine: {self.bullet_client.addUserDebugLine}")
+        # random_action = self.action_space.sample()
+        random_action = [-0.30553615, -3.0663216, -8.185578, 0.07727123, -0.56605875, -0.44894674, 0.06767046, -1.6455808, 0.16513418, -0.85248154, -1.7382416, 0.15633392, -0.7695309, 0.39886168, -0.03402488]
+        # random_action = self.get_joint_values()
+        # random_action[0] = 5.0
+        # random_action[1] = 5.0
+        print(f"Sample action: {random_action}, will apply in 2 seconds")
+        time.sleep(2)
+        self.step(random_action)
+
+        # self.spin()
 
     def close(self):
         self.px_client.release()
 
-    def step(self, action):
-        ...
+    def step(self, action: list):
+        self.set_joint_position(action)
+    
+    def set_joint_position(self, q):
+        if len(q) != self.num_dofs:
+            raise ValueError(f"set_joint_positions(): q has {len(q)} values but robot has {self.num_dofs} DOF")
+
+        current_base_position_xy = self.get_base_position_xy()
+        line_from_xyz = [current_base_position_xy[0], current_base_position_xy[1], 0.0]
+        line_to_xyz = [q[0], q[1], 0.0]
+
+        line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=10.0)
+        
+        print("Will set_joint_position now..")
+        self.robot_body_unique_id.set_joint_position(
+            q,
+            max_forces=self.joint_max_forces,
+            use_joint_effort_limits=True
+        )
+        print("done")
+
+        start_time = time.time()
+        error = self.get_error(q, self.get_joint_values())
+        base_velocity = np.linalg.norm(self.get_base_velocity())
+        robot_has_started_moving = False
+        base_log_start, base_log_freq = start_time, 5.0
+        while True:
+            if not robot_has_started_moving and base_velocity > 1.0:
+                robot_has_started_moving = True
+
+            if time.time() - start_time > self.max_time_to_reach_goal:
+                print(f"TIMED OUT on its way to goal, L2 norm of error across all joints: {error}")
+                break
+            
+            if error < self.error_tolerance and robot_has_started_moving and base_velocity <= 0.001:
+                print(f"REACHED GOAL in {time.time() - start_time} seconds, all joints error: {error},  base error: {self.get_base_error(q, self.get_joint_values())}, base velocity: {base_velocity}")
+                print(f"Joint values at goal: {self.get_joint_values()}")
+                break
+            
+            if time.time() - base_log_start > base_log_freq:
+                base_log_start = time.time()
+                print("Currently:")
+                print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values())}")
+                print(f"\tJoint values: {self.get_joint_values()}")
+
+            time.sleep(0.01)
+            self.bullet_client.stepSimulation()
+            error = self.get_error(q, self.get_joint_values())
+            base_velocity = np.linalg.norm(self.get_base_velocity())
+
+        self.bullet_client.removeUserDebugItem(line_id)
+        print("Removed User Debug Line, will sleep for 5 seconds")
+        time.sleep(5.0)
+        print("Done") 
     
     def reset(self):
         self.robot_body_unique_id.reset()
@@ -142,9 +209,16 @@ class HsrPybulletEnv(gym.Env):
     def render(self, mode="human", close=False):
         ...
 
+    def get_error(self, q1, q2):
+        return np.linalg.norm(q1 - q2)   # order of q is the same as all_joint_names
+    
+    def get_base_error(self, q1, q2):
+        return np.linalg.norm(q1[:2] - q2[:2])   # order of q is the same as all_joint_names
+    
     def spin(self):
         while True:
-            self.get_joint_values(verbose=True)
+            # self.get_joint_values(verbose=True)
+            # print(f"SPINNING: Base velocity: {self.get_base_velocity()}")
             width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             self.bullet_client.stepSimulation()
             time.sleep(0.01)
@@ -211,11 +285,24 @@ class HsrPybulletEnv(gym.Env):
         joint_values = self.robot_body_unique_id.get_states().joint_position
 
         if verbose:
-            print("All joint values:")
-            for name, value in zip(all_joint_names, joint_values):
-                print(f"\t{name}: {value}")
+            print(f"All joint values: {joint_values}")
+            # for name, value in zip(all_joint_names, joint_values):
+            #     print(f"\t{name}: {value}")
 
         return joint_values
+    
+    def get_joint_velocities(self, verbose=False):
+        return list(self.robot_body_unique_id.get_states().joint_velocity)
+    
+    def get_joint_max_velocities_and_forces(self, verbose=False):
+        joint_infos = self.robot_body_unique_id.get_joint_infos()
+        return joint_infos["joint_max_velocity"], joint_infos["joint_max_force"]
+    
+    def get_base_position_xy(self):
+        return self.get_joint_values()[:2]   # first two elements are x and y
+    
+    def get_base_velocity(self):
+        return self.get_joint_velocities()[:2]
 
     def add_object_to_scene(self, model_name: str):
         mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
@@ -257,4 +344,4 @@ class HsrPybulletEnv(gym.Env):
 
 if __name__ == "__main__":
     env = HsrPybulletEnv()
-    check_env(env)
+    # check_env(env)
