@@ -46,21 +46,21 @@ CAMERA_REALSENSE_CONFIG = {
 }
 
 all_joint_names = [  # order is important
-    'joint_x',
-    'joint_y',
-    'joint_rz',
-    'torso_lift_joint',
-    'head_pan_joint',
-    'head_tilt_joint',
-    'arm_lift_joint',
-    'arm_flex_joint',
-    'arm_roll_joint',
-    'wrist_flex_joint',
-    'wrist_roll_joint',
-    'hand_l_proximal_joint',
-    'hand_l_distal_joint',
-    'hand_r_proximal_joint',
-    'hand_r_distal_joint'
+    'joint_x',                 # 0
+    'joint_y',                 # 1
+    'joint_rz',                # 2
+    'torso_lift_joint',        # 3
+    'head_pan_joint',          # 4
+    'head_tilt_joint',         # 5
+    'arm_lift_joint',          # 6
+    'arm_flex_joint',          # 7
+    'arm_roll_joint',          # 8
+    'wrist_flex_joint',        # 9
+    'wrist_roll_joint',        # 10
+    'hand_l_proximal_joint',   # 11
+    'hand_l_distal_joint',     # 12
+    'hand_r_proximal_joint',   # 13
+    'hand_r_distal_joint'      # 14
     ]
 
 class JointName(Enum):
@@ -84,7 +84,7 @@ class HsrPybulletEnv(gym.Env):
     def __init__(self) -> None:
         super().__init__()
 
-        urdf_file_path = "hsrb_description/robots/hsrb.urdf"
+        self.urdf_file_path = "hsrb_description/robots/hsrb.urdf"
         use_fixed_base = True
         torque_control = True
         self.connection_mode = p.GUI
@@ -95,6 +95,9 @@ class HsrPybulletEnv(gym.Env):
 
         self.camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
         self.camera_config = deepcopy(CAMERA_REALSENSE_CONFIG if hand else CAMERA_XTION_CONFIG)
+        
+        self.end_effector_joint_frame = 'hand_palm_joint'
+        self.end_effector_link_idx = 35  # hand_palm_joint, hand_palm_link
 
         self.bullet_client = bc.BulletClient(connection_mode=self.connection_mode)
         self.px_client = px.Client(client_id=self.bullet_client._client)
@@ -107,7 +110,7 @@ class HsrPybulletEnv(gym.Env):
         self.renderer = self.bullet_client.ER_BULLET_HARDWARE_OPENGL   # or pybullet_client.ER_TINY_RENDERER
 
         self.robot_body_unique_id = px.Robot(
-            urdf_file_path,
+            self.urdf_file_path,
             use_fixed_base=use_fixed_base,
             physics_client=self.px_client,
             base_position=[0.0, 0.0, 0.0],
@@ -131,7 +134,9 @@ class HsrPybulletEnv(gym.Env):
             np.array(self.joint_limits_upper).astype(np.float32)
         )
 
-        self.add_object_to_scene(model_name="007_tuna_fish_can")
+        self.added_obj_id = self.add_object_to_scene(model_name="007_tuna_fish_can", base_position=(2.0, 2.0, 0))
+        position_xyz, quaternion_xyzw = self.get_object_pose()
+        self.print_pose(position_xyz, quaternion_xyzw, title="Object position:")
 
         # print(f"Checking for existence of addUserDebugLine: {self.bullet_client.addUserDebugLine}")
         # random_action = self.get_random_joint_config()
@@ -150,12 +155,25 @@ class HsrPybulletEnv(gym.Env):
             print(f"Sample action {i+1}/{N}: {random_action}")
             self.step(random_action)
 
+        # position_xyz = list(position_xyz)
+        # position_xyz[2] += 0.1
+        # position_xyz = tuple(position_xyz)
+        # quaternion_xyzw = list(quaternion_xyzw)
+        # quaternion_xyzw[1] = 1.0
+        # quaternion_xyzw[3] = 0.0
+        # quaternion_xyzw = tuple(quaternion_xyzw)
+        # ik_solution = self.calculate_inverse_kinematics(position_xyz, quaternion_xyzw, True)
+        # fk_solution = self.calculate_forward_kinematics(ik_solution, True)
+        # self.step(action=ik_solution)
+
         # self.spin()
 
     def close(self):
         self.px_client.release()
 
     def step(self, action: list):
+        done = False
+        info = {}
         self.set_joint_position(action)
     
     def get_random_joint_config(self):
@@ -219,7 +237,7 @@ class HsrPybulletEnv(gym.Env):
             
             if error < self.error_tolerance and robot_has_started_moving and base_velocity <= 0.001:
                 print(f"REACHED GOAL in {time.time() - start_time} seconds, all joints error: {error},  base error: {self.get_base_error(q, self.get_joint_values())}, base velocity: {base_velocity}")
-                print(f"Joint values at goal: {self.get_joint_values()}")
+                self.print_joint_values(self.get_joint_values(), title="Joint values at goal:")
                 break
             
             if time.time() - base_log_start > base_log_freq:
@@ -272,10 +290,45 @@ class HsrPybulletEnv(gym.Env):
             self.bullet_client.stepSimulation()
             time.sleep(0.01)
 
+    def print_joint_values(self, q, title=None, tab_indent=0):
+        if len(q) != self.num_dofs:
+            raise ValueError(f"print_joint_values(): q has {len(q)} values but robot has {self.num_dofs} DOF")
+        
+        if title is None:
+            title = "All joint values:"
+
+        tab_indent_str = ""
+        for _ in range(tab_indent):
+            tab_indent_str += "\t"        
+        
+        title = tab_indent_str + title
+        print(title)
+        tab_indent_str += "\t"
+        for name, value in zip(all_joint_names, q):
+            print(f"{tab_indent_str}{name}: {value:.4f}")
+    
+    def print_pose(self, position_xyz, quaternion_xyzw, title=None):
+        if len(position_xyz) != 3:
+            raise ValueError(f"print_pose(): position_xyz has {len(position_xyz)} elements but should have 3 elements")
+        if len(quaternion_xyzw) != 4:
+            raise ValueError(f"print_pose(): quaternion_xyzw has {len(quaternion_xyzw)} elements but should have 4 elements")
+        
+        if title is None:
+            title = "Position and orientation:"
+        print(title)
+        print("\tPosition:")
+        for coor in position_xyz:
+            print(f"\t\t{coor:.4f}")
+        print("\tQuaternion (xyzw):")
+        for coor in quaternion_xyzw:
+            print(f"\t\t{coor:.4f}")
+    
+    def get_joint_frame_pose(self, joint_frame: str):
+        link_state = self.robot_body_unique_id.get_link_state_by_name(joint_frame)
+        return link_state.world_link_frame_position, link_state.world_link_frame_orientation
+    
     def get_camera_image(self):
-        camera_link_state = self.robot_body_unique_id.get_link_state_by_name(self.camera_joint_frame)
-        camera_link_position = camera_link_state.world_link_frame_position
-        camera_link_orientation = camera_link_state.world_link_frame_orientation
+        camera_link_position, camera_link_orientation = self.get_joint_frame_pose(self.camera_joint_frame)
 
         self.camera_config["position"] = list(camera_link_position)
         self.camera_config["orientation"] = list(camera_link_orientation)
@@ -334,9 +387,7 @@ class HsrPybulletEnv(gym.Env):
         joint_values = self.robot_body_unique_id.get_states().joint_position
 
         if verbose:
-            print(f"All joint values: {joint_values}")
-            # for name, value in zip(all_joint_names, joint_values):
-            #     print(f"\t{name}: {value}")
+            self.print_joint_values(joint_values, title="All joint values:")
 
         return joint_values
     
@@ -353,7 +404,84 @@ class HsrPybulletEnv(gym.Env):
     def get_base_velocity(self):
         return self.get_joint_velocities()[:2]
 
-    def add_object_to_scene(self, model_name: str):
+    def calculate_inverse_kinematics(self, position_xyz: tuple, quaternion_xyzw: tuple, verbose=False):
+        if verbose:
+            self.print_pose(position_xyz, quaternion_xyzw, title="Calculating IK for")
+
+        q = self.bullet_client.calculateInverseKinematics(
+            bodyUniqueId=self.robot_body_unique_id.id,
+            endEffectorLinkIndex=self.end_effector_link_idx,
+            targetPosition=position_xyz,
+            targetOrientation=quaternion_xyzw,
+            lowerLimits=self.joint_limits_lower,
+            upperLimits=self.joint_limits_upper,
+            restPoses=self.get_joint_values(),
+            maxNumIterations=1000,
+            residualThreshold=1e-4,
+            physicsClientId=self.bullet_client._client
+        )
+
+        if verbose:
+            self.print_joint_values(q, title="IK solution:", tab_indent=1)
+
+        return list(q)
+        
+    def calculate_forward_kinematics(self, q, verbose=False):
+        """
+        Ref: https://github.com/bulletphysics/bullet3/issues/2603
+                "create a second DIRECT pybullet connection, load the arm there, reset it to the angles,
+                and run the forward kinematics in that second 'dummy' robot."
+        
+        For creating a second connection, refer to https://github.com/bulletphysics/bullet3/issues/1925#issuecomment-428355937
+        """
+
+        if len(q) != self.num_dofs:
+            raise ValueError(f"calculate_forward_kinematics(): q has {len(q)} values but robot has {self.num_dofs} DOF")
+        
+        if verbose:
+            self.print_joint_values(q, title="Calculating FK for:")
+        
+        throwaway_client = bc.BulletClient(connection_mode=p.DIRECT)
+
+        throwaway_client.setAdditionalSearchPath(pybullet_data.getDataPath())
+        throwaway_client.loadURDF("plane.urdf")
+
+        throwaway_client.setGravity(0, 0, -9.8)
+
+        throwaway_robot_body_unique_id = throwaway_client.loadURDF(
+            self.urdf_file_path,
+            useFixedBase=True,
+            flags=p.URDF_USE_SELF_COLLISION
+        )
+
+        throwaway_client.setJointMotorControlArray(
+            bodyIndex=throwaway_robot_body_unique_id,
+            jointIndices=self.free_joint_indices,
+            controlMode=p.POSITION_CONTROL,
+            forces=np.zeros(self.num_dofs),
+        )
+
+        gripper_state = throwaway_client.getLinkState(
+            bodyUniqueId=throwaway_robot_body_unique_id,
+            linkIndex=self.end_effector_link_idx,
+            computeForwardKinematics=1
+            )
+        
+        throwaway_client.disconnect()
+        
+        if verbose:
+            self.print_pose(gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation, title="FK results:")
+
+        return gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation
+    
+    def get_object_pose(self):
+        position_xyz, quaternion_xyzw = self.bullet_client.getBasePositionAndOrientation(
+            bodyUniqueId=self.added_obj_id,
+            physicsClientId=self.bullet_client._client
+            )
+        return position_xyz, quaternion_xyzw
+    
+    def add_object_to_scene(self, model_name: str, base_position: tuple):
         mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
         collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
         mesh = trimesh.load(mesh_path, force='mesh', process=False)
@@ -381,7 +509,7 @@ class HsrPybulletEnv(gym.Env):
 
         obj_id = self.bullet_client.createMultiBody(
             baseMass=mesh.mass,
-            basePosition=(1.0, 0, 0),
+            basePosition=base_position,
             baseOrientation=(0, 0, 0, 1),
             baseCollisionShapeIndex=collision_shape_id,
             baseVisualShapeIndex=visual_shape_id,
@@ -389,6 +517,8 @@ class HsrPybulletEnv(gym.Env):
         )
 
         self.bullet_client.changeDynamics(obj_id, -1, lateralFriction=0.25)
+
+        return obj_id
 
 
 if __name__ == "__main__":
