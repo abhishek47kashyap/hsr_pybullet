@@ -45,22 +45,75 @@ CAMERA_REALSENSE_CONFIG = {
     'noise': False
 }
 
+"""
+Joint information:
+  Joint 0: b'joint_x', type: 1, limits: lower -10.0, upper: 10.0, link-name: b'link_x'
+  Joint 1: b'joint_y', type: 1, limits: lower -10.0, upper: 10.0, link-name: b'link_y'
+  Joint 2: b'joint_rz', type: 0, limits: lower -10.0, upper: 10.0, link-name: b'link_rz'
+  Joint 3: b'base_footprint_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_link'
+  Joint 4: b'base_roll_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_roll_link'
+  Joint 5: b'base_r_drive_wheel_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_r_drive_wheel_link'
+  Joint 6: b'base_l_drive_wheel_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_l_drive_wheel_link'
+  Joint 7: b'base_r_passive_wheel_x_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_r_passive_wheel_x_frame'
+  Joint 8: b'base_r_passive_wheel_y_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_r_passive_wheel_y_frame'
+  Joint 9: b'base_r_passive_wheel_z_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_r_passive_wheel_z_link'
+  Joint 10: b'base_l_passive_wheel_x_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_l_passive_wheel_x_frame'
+  Joint 11: b'base_l_passive_wheel_y_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_l_passive_wheel_y_frame'
+  Joint 12: b'base_l_passive_wheel_z_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_l_passive_wheel_z_link'
+  Joint 13: b'base_range_sensor_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_range_sensor_link'
+  Joint 14: b'base_imu_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'base_imu_frame'
+  Joint 15: b'base_f_bumper_joint', type: 4, limits: lower 0.0, upper: 0.0, link-name: b'base_f_bumper_link'
+  Joint 16: b'base_b_bumper_joint', type: 4, limits: lower 0.0, upper: 0.0, link-name: b'base_b_bumper_link'
+  Joint 17: b'torso_lift_joint', type: 1, limits: lower 0.0, upper: 0.345, link-name: b'torso_lift_link'
+  Joint 18: b'head_pan_joint', type: 0, limits: lower -3.84, upper: 1.75, link-name: b'head_pan_link'
+  Joint 19: b'head_tilt_joint', type: 0, limits: lower -1.57, upper: 0.52, link-name: b'head_tilt_link'
+  Joint 20: b'head_l_stereo_camera_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_l_stereo_camera_link'
+  Joint 21: b'head_l_stereo_camera_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_l_stereo_camera_gazebo_frame'
+  Joint 22: b'head_r_stereo_camera_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_r_stereo_camera_link'
+  Joint 23: b'head_r_stereo_camera_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_r_stereo_camera_gazebo_frame'
+  Joint 24: b'head_center_camera_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_center_camera_frame'
+  Joint 25: b'head_center_camera_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_center_camera_gazebo_frame'
+  Joint 26: b'head_rgbd_sensor_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_rgbd_sensor_link'
+  Joint 27: b'head_rgbd_sensor_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'head_rgbd_sensor_gazebo_frame'
+  Joint 28: b'arm_lift_joint', type: 1, limits: lower 0.0, upper: 0.69, link-name: b'arm_lift_link'
+  Joint 29: b'arm_flex_joint', type: 0, limits: lower -2.62, upper: 0.0, link-name: b'arm_flex_link'
+  Joint 30: b'arm_roll_joint', type: 0, limits: lower -2.09, upper: 3.84, link-name: b'arm_roll_link'
+  Joint 31: b'wrist_flex_joint', type: 0, limits: lower -1.92, upper: 1.22, link-name: b'wrist_flex_link'
+  Joint 32: b'wrist_roll_joint', type: 0, limits: lower -1.92, upper: 3.67, link-name: b'wrist_ft_sensor_mount_link'
+  Joint 33: b'wrist_ft_sensor_frame_joint', type: 4, limits: lower 0.0, upper: 0.0, link-name: b'wrist_ft_sensor_frame'
+  Joint 34: b'wrist_ft_sensor_frame_inverse_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'wrist_roll_link'
+  Joint 35: b'hand_palm_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_palm_link'
+  Joint 36: b'hand_motor_joint', type: 4, limits: lower -0.798, upper: 1.24, link-name: b'hand_motor_dummy_link'
+  Joint 37: b'hand_l_proximal_joint', type: 0, limits: lower -0.798, upper: 1.24, link-name: b'hand_l_proximal_link'
+  Joint 38: b'hand_l_spring_proximal_joint', type: 4, limits: lower 0.0, upper: 0.698, link-name: b'hand_l_spring_proximal_link'
+  Joint 39: b'hand_l_mimic_distal_joint', type: 4, limits: lower -0.698, upper: -0.0, link-name: b'hand_l_mimic_distal_link'
+  Joint 40: b'hand_l_distal_joint', type: 0, limits: lower -1.24, upper: 0.798, link-name: b'hand_l_distal_link'
+  Joint 41: b'hand_l_finger_tip_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_l_finger_tip_frame'
+  Joint 42: b'hand_l_finger_vacuum_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_l_finger_vacuum_frame'
+  Joint 43: b'hand_r_proximal_joint', type: 0, limits: lower -0.798, upper: 1.24, link-name: b'hand_r_proximal_link'
+  Joint 44: b'hand_r_spring_proximal_joint', type: 4, limits: lower 0.0, upper: 0.698, link-name: b'hand_r_spring_proximal_link'
+  Joint 45: b'hand_r_mimic_distal_joint', type: 4, limits: lower -0.698, upper: -0.0, link-name: b'hand_r_mimic_distal_link'
+  Joint 46: b'hand_r_distal_joint', type: 0, limits: lower -1.24, upper: 0.798, link-name: b'hand_r_distal_link'
+  Joint 47: b'hand_r_finger_tip_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_r_finger_tip_frame'
+  Joint 48: b'hand_camera_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_camera_frame'
+  Joint 49: b'hand_camera_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_camera_gazebo_frame'
+"""
 all_joint_names = [  # order is important
-    'joint_x',                 # 0
-    'joint_y',                 # 1
-    'joint_rz',                # 2
-    'torso_lift_joint',        # 3
-    'head_pan_joint',          # 4
-    'head_tilt_joint',         # 5
-    'arm_lift_joint',          # 6
-    'arm_flex_joint',          # 7
-    'arm_roll_joint',          # 8
-    'wrist_flex_joint',        # 9
-    'wrist_roll_joint',        # 10
-    'hand_l_proximal_joint',   # 11
-    'hand_l_distal_joint',     # 12
-    'hand_r_proximal_joint',   # 13
-    'hand_r_distal_joint'      # 14
+    'joint_x',                 # 0   (actual joint index: 0)
+    'joint_y',                 # 1   (actual joint index: 1)
+    'joint_rz',                # 2   (actual joint index: 2)
+    'torso_lift_joint',        # 3   (actual joint index: 17)
+    'head_pan_joint',          # 4   (actual joint index: 18)
+    'head_tilt_joint',         # 5   (actual joint index: 19)
+    'arm_lift_joint',          # 6   (actual joint index: 28)
+    'arm_flex_joint',          # 7   (actual joint index: 29)
+    'arm_roll_joint',          # 8   (actual joint index: 30)
+    'wrist_flex_joint',        # 9   (actual joint index: 31)
+    'wrist_roll_joint',        # 10  (actual joint index: 32)
+    'hand_l_proximal_joint',   # 11  (actual joint index: 37)
+    'hand_l_distal_joint',     # 12  (actual joint index: 40)
+    'hand_r_proximal_joint',   # 13  (actual joint index: 43)
+    'hand_r_distal_joint'      # 14  (actual joint index: 46)
     ]
 
 class JointName(Enum):
