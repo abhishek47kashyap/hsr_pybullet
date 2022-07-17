@@ -45,6 +45,12 @@ CAMERA_REALSENSE_CONFIG = {
     'noise': False
 }
 
+observation_template = {
+    "joint_values": None,
+    "base_velocity_normalized": None,
+    "object_pose": None
+}
+
 """
 Joint information:
   Joint 0: b'joint_x', type: 1, limits: lower -10.0, upper: 10.0, link-name: b'link_x'
@@ -190,7 +196,7 @@ class HsrPybulletEnv(gym.Env):
             np.array(self.joint_limits_upper).astype(np.float32)
         )
 
-        self.added_obj_id = self.add_object_to_scene(model_name="007_tuna_fish_can", base_position=(2.0, 2.0, 0))
+        self.added_obj_id = self.add_object_to_scene(model_name="002_master_chef_can", base_position=(2.0, 2.0, 0))
         position_xyz, quaternion_xyzw = self.get_object_pose()
         self.print_pose(position_xyz, quaternion_xyzw, title="Object position:")
 
@@ -230,7 +236,25 @@ class HsrPybulletEnv(gym.Env):
     def step(self, action: list):
         done = False
         info = {}
+
         self.set_joint_position(action)
+
+        obs = self.get_observation(verbose=False)
+
+    def get_observation(self, verbose=False):
+        obs = deepcopy(observation_template)
+        obs["joint_values"] = self.get_joint_values()
+        obs["base_velocity_normalized"] = self.get_base_velocity(normalized=True)
+        obj_position_xyz, obj_quaternion_xyzw = self.get_object_pose()
+        obs["object_pose"] = {"position_xyz": obj_position_xyz, "quaternion_xyzw": obj_quaternion_xyzw}
+
+        if verbose:
+            print("OBSERVATION:")
+            self.print_joint_values(obs["joint_values"], title="Joint values:", tab_indent=1)
+            print("\tBase velocity: %.5f" % obs["base_velocity_normalized"])
+            self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=1)
+
+        return obs
     
     def get_random_joint_config(self):
         return self.action_space.sample()
@@ -280,7 +304,7 @@ class HsrPybulletEnv(gym.Env):
 
         start_time = time.time()
         error = self.get_error(q, self.get_joint_values())
-        base_velocity = np.linalg.norm(self.get_base_velocity())
+        base_velocity = self.get_base_velocity(normalized=True)
         robot_has_started_moving = False
         base_log_start, base_log_freq = start_time, 5.0
         while True:
@@ -288,11 +312,11 @@ class HsrPybulletEnv(gym.Env):
                 robot_has_started_moving = True
 
             if time.time() - start_time > self.max_time_to_reach_goal:
-                print(f"TIMED OUT on its way to goal, L2 norm of error across all joints: {error}, base_velocity: {base_velocity}")
+                print(f"TIMED OUT on its way to goal, L2 norm of error across all joints: {error:.4f}, base_velocity: {base_velocity:.4f}")
                 break
             
             if error < self.error_tolerance and robot_has_started_moving and base_velocity <= 0.001:
-                print(f"REACHED GOAL in {time.time() - start_time} seconds, all joints error: {error},  base error: {self.get_base_error(q, self.get_joint_values())}, base velocity: {base_velocity}")
+                print(f"REACHED GOAL in {time.time() - start_time:.4f} seconds, all joints error: {error:.4f},  base error: {self.get_base_error(q, self.get_joint_values()):.4f}, base velocity: {base_velocity:.4f}")
                 self.print_joint_values(self.get_joint_values(), title="Joint values at goal:")
                 break
             
@@ -363,7 +387,7 @@ class HsrPybulletEnv(gym.Env):
         for name, value in zip(all_joint_names, q):
             print(f"{tab_indent_str}{name}: {value:.4f}")
     
-    def print_pose(self, position_xyz, quaternion_xyzw, title=None):
+    def print_pose(self, position_xyz, quaternion_xyzw, title=None, tab_indent=0):
         if len(position_xyz) != 3:
             raise ValueError(f"print_pose(): position_xyz has {len(position_xyz)} elements but should have 3 elements")
         if len(quaternion_xyzw) != 4:
@@ -371,13 +395,20 @@ class HsrPybulletEnv(gym.Env):
         
         if title is None:
             title = "Position and orientation:"
+
+        tab_indent_str = ""
+        for _ in range(tab_indent):
+            tab_indent_str += "\t"
+
+        title = tab_indent_str + title
         print(title)
-        print("\tPosition:")
+        tab_indent_str += "\t"
+        print(f"{tab_indent_str}Position:")
         for coor in position_xyz:
-            print(f"\t\t{coor:.4f}")
-        print("\tQuaternion (xyzw):")
+            print(f"{tab_indent_str}\t{coor:.4f}")
+        print(f"{tab_indent_str}Quaternion (xyzw):")
         for coor in quaternion_xyzw:
-            print(f"\t\t{coor:.4f}")
+            print(f"{tab_indent_str}\t{coor:.4f}")
     
     def get_joint_frame_pose(self, joint_frame: str):
         link_state = self.robot_body_unique_id.get_link_state_by_name(joint_frame)
@@ -457,8 +488,9 @@ class HsrPybulletEnv(gym.Env):
     def get_base_position_xy(self):
         return self.get_joint_values()[:2]   # first two elements are x and y
     
-    def get_base_velocity(self):
-        return self.get_joint_velocities()[:2]
+    def get_base_velocity(self, normalized=False):
+        base_vel = self.get_joint_velocities()[:2]  # X and Y components
+        return np.linalg.norm(base_vel) if normalized else base_vel
 
     def calculate_inverse_kinematics(self, position_xyz: tuple, quaternion_xyzw: tuple, verbose=False):
         if verbose:
