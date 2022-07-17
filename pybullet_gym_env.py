@@ -138,10 +138,12 @@ class HsrPybulletEnv(gym.Env):
         super().__init__()
 
         self.urdf_file_path = "hsrb_description/robots/hsrb.urdf"
-        use_fixed_base = True
         torque_control = True
         self.connection_mode = p.GUI
         hand = False
+
+        self.gravity_enabled = True
+        self.use_fixed_base = True
 
         self.error_tolerance = 1.0
         self.max_time_to_reach_goal = 20  # seconds allowed to reach goal
@@ -158,13 +160,14 @@ class HsrPybulletEnv(gym.Env):
         self.bullet_client.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.bullet_client.loadURDF("plane.urdf")
 
-        self.bullet_client.setGravity(0, 0, -9.8)
+        if self.gravity_enabled:
+            self.bullet_client.setGravity(0, 0, -9.8)
 
         self.renderer = self.bullet_client.ER_BULLET_HARDWARE_OPENGL   # or pybullet_client.ER_TINY_RENDERER
 
         self.robot_body_unique_id = px.Robot(
             self.urdf_file_path,
-            use_fixed_base=use_fixed_base,
+            use_fixed_base=self.use_fixed_base,
             physics_client=self.px_client,
             base_position=[0.0, 0.0, 0.0],
             flags=self.bullet_client.URDF_USE_SELF_COLLISION
@@ -285,7 +288,7 @@ class HsrPybulletEnv(gym.Env):
                 robot_has_started_moving = True
 
             if time.time() - start_time > self.max_time_to_reach_goal:
-                print(f"TIMED OUT on its way to goal, L2 norm of error across all joints: {error}")
+                print(f"TIMED OUT on its way to goal, L2 norm of error across all joints: {error}, base_velocity: {base_velocity}")
                 break
             
             if error < self.error_tolerance and robot_has_started_moving and base_velocity <= 0.001:
@@ -499,11 +502,12 @@ class HsrPybulletEnv(gym.Env):
         throwaway_client.setAdditionalSearchPath(pybullet_data.getDataPath())
         throwaway_client.loadURDF("plane.urdf")
 
-        throwaway_client.setGravity(0, 0, -9.8)
+        if self.gravity_enabled:
+            throwaway_client.setGravity(0, 0, -9.8)
 
         throwaway_robot_body_unique_id = throwaway_client.loadURDF(
             self.urdf_file_path,
-            useFixedBase=True,
+            useFixedBase=self.use_fixed_base,
             flags=p.URDF_USE_SELF_COLLISION
         )
 
