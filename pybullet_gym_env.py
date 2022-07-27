@@ -26,6 +26,17 @@ import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
 
+GRIPPER_JOINT_VALUES = {
+    "open": {
+        "distal": 0.0, # -np.pi * 0.25,
+        "proximal": 0.7 # 1
+    },
+    "close": {
+        "distal": 0.0,
+        "proximal": 0.0 # -0.1
+    }
+}
+
 CAMERA_XTION_CONFIG = {
     'image_size': (480, 640),
     'intrinsics': (537.4933389299223, 0.0, 319.9746375212718, 0.0, 536.5961755975517, 244.54846607953, 0.0, 0.0, 1.0),
@@ -211,11 +222,21 @@ class HsrPybulletEnv(gym.Env):
         # time.sleep(2)
         # self.step(random_action)
 
-        N = 3
+        N = 4
         for i in range(N):
-            random_action = self.get_random_joint_config()
-            print(f"Sample action {i+1}/{N}: {random_action}")
-            self.step(random_action)
+            if (i % 2) == 0:
+                print("Will close gripper in 3 seconds")
+                time.sleep(3)
+                self.gripper_close()
+                print("gripper should be closed")
+            else:
+                print("Will open gripper in 3 seconds")
+                time.sleep(3)
+                self.gripper_open()
+                print("gripper should be open")
+            # random_action = self.get_random_joint_config()
+            # print(f"Sample action {i+1}/{N}: {random_action}")
+            # self.step(random_action)
 
         # position_xyz = list(position_xyz)
         # position_xyz[2] += 0.1
@@ -323,7 +344,7 @@ class HsrPybulletEnv(gym.Env):
             if time.time() - base_log_start > base_log_freq:
                 base_log_start = time.time()
                 print("Currently:")
-                print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values())}, all joint error: {error}")
+                print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values()):.4f}, all joint error: {error}")
                 current_joint_values = self.get_joint_values()
                 print(f"\tJoint values:")
                 for i in range(len(all_joint_names)):
@@ -563,6 +584,26 @@ class HsrPybulletEnv(gym.Env):
 
         return gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation
     
+    def gripper_open(self):
+        q = self.get_joint_values()
+
+        q[-1] = GRIPPER_JOINT_VALUES["open"]["distal"]        # hand_r_distal_joint
+        q[-2] = GRIPPER_JOINT_VALUES["open"]["proximal"]      # hand_r_proximal_joint
+        q[-3] = deepcopy(q[-1])                               # hand_l_distal_joint
+        q[-4] = deepcopy(q[-2])                               # hand_l_proximal_joint
+
+        self.set_joint_position(q)
+
+    def gripper_close(self):
+        q = self.get_joint_values()
+
+        q[-1] = GRIPPER_JOINT_VALUES["close"]["distal"]        # hand_r_distal_joint
+        q[-2] = GRIPPER_JOINT_VALUES["close"]["proximal"]      # hand_r_proximal_joint
+        q[-3] = deepcopy(q[-1])                                # hand_l_distal_joint
+        q[-4] = deepcopy(q[-2])                                # hand_l_proximal_joint
+
+        self.set_joint_position(q)
+
     def get_object_pose(self):
         position_xyz, quaternion_xyzw = self.bullet_client.getBasePositionAndOrientation(
             bodyUniqueId=self.added_obj_id,
