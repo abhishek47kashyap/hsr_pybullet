@@ -18,6 +18,8 @@ from copy import deepcopy
 from scipy.spatial.transform import Rotation as R
 import time
 import random
+import os
+import sys
 
 import trimesh
 
@@ -152,6 +154,10 @@ all_joint_names = [  # order is important
     'hand_r_distal_joint'      # 14  (actual joint index: 46)
     ]
 
+
+def file_exists(filepath: str) -> bool:
+    return os.path.exists(filepath)
+
 class JointName(Enum):
     joint_x = all_joint_names[0]
     joint_y = all_joint_names[1]
@@ -174,6 +180,9 @@ class HsrPybulletEnv(gym.Env):
         super().__init__()
 
         self.urdf_file_path = "hsrb_description/robots/hsrb.urdf"
+        if not file_exists(self.urdf_file_path):
+            print(f"ERROR! Urdf filepath does not exist: {self.urdf_file_path}")
+
         self.object_model_name = "002_master_chef_can"
         torque_control = True
         gui = True
@@ -677,6 +686,16 @@ class HsrPybulletEnv(gym.Env):
     def add_object_to_scene(self, model_name: str, base_position: tuple, verbose=False):
         mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
         collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
+        file_not_found = False
+        if not file_exists(mesh_path):
+            print(f"ERROR! Mesh filepath for {model_name} does not exist: {mesh_path}")
+            file_not_found = True
+        if not file_exists(collision_path):
+            print(f"ERROR! Collision filepath for {model_name} does not exist: {collision_path}")
+            file_not_found = True
+        if file_not_found:
+            sys.exit()
+
         mesh = trimesh.load(mesh_path, force='mesh', process=False)
         mesh.density = 150
         scale = 1
