@@ -29,6 +29,8 @@ import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
 
+np.set_printoptions(suppress=True)
+
 GRIPPER_JOINT_VALUES = {
     "open": {
         "distal": 0.0, # -np.pi * 0.25,
@@ -204,6 +206,7 @@ class HsrPybulletEnv(gym.Env):
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_space = True
+        self.normalized_observation_space = True
 
         self.connection_mode = p.GUI if gui else p.DIRECT
         print(f"{Color.Green.value}GUI mode is %s{Color.Color_Off.value}" % ("enabled" if gui else "disabled"))
@@ -239,6 +242,7 @@ class HsrPybulletEnv(gym.Env):
             base_position=[0.0, 0.0, 0.0],
             flags=self.bullet_client.URDF_USE_SELF_COLLISION
             )
+        print()
         self.robot_body_unique_id.torque_control = torque_control
 
         self.num_joints = self.robot_body_unique_id.num_joints   # 15
@@ -258,10 +262,8 @@ class HsrPybulletEnv(gym.Env):
                 np.array(self.joint_limits_lower).astype(np.float32),
                 np.array(self.joint_limits_upper).astype(np.float32),
             )
-        self.observation_space = spaces.Box(
-            np.array(self.joint_limits_lower).astype(np.float32),
-            np.array(self.joint_limits_upper).astype(np.float32)
-        )
+        self.observation_space_length = 24  # 15 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
+        self.observation_space = self.construct_observation_space(verbose=False)
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
@@ -278,6 +280,8 @@ class HsrPybulletEnv(gym.Env):
     def spawn_object_at_random_location(self, model_name: str, verbose=False):
         min_xy = 2.0
         max_xy = 7.0   # robot xy location is limited to (±10, ±10)
+
+        # NOTE: if min_xy or max_xy changes, also update construct_observation_space()
 
         base_position = [random.uniform(min_xy, max_xy) for i in range(2)]
         base_position.append(0.0)
@@ -300,11 +304,21 @@ class HsrPybulletEnv(gym.Env):
             for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
                 normalized_value = deepcopy(action[i])
                 action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))
-                print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
-        self.set_joint_position(action)
+                if verbose:
+                    print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
+        self.set_joint_position(action, verbose=verbose)
 
-        obs = self.get_observation(verbose=False)
+        obs = self.get_observation(verbose=verbose, numpify=True)
         reward = self.calculate_reward()
+
+        if not self.observation_space.contains(obs):
+            print(f"{Color.Yellow.value}WARNING: observation does not fall within observation space{Color.Color_Off.value}")
+            print("\tApplied action is %s" % "normalized" if self.normalized_action_space else "not normalized")
+            print(f"\tAction: {action}")
+            print("\tLimit check:")
+            for i in range(self.observation_space_length):
+                color = Color.Color_Off.value if self.observation_space.low[i] <= obs[i] <= self.observation_space.high[i] else Color.Red.value
+                print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]}, upper limit {self.observation_space.high[i]}{Color.Color_Off.value}")
 
         return obs, reward, done, info
 
@@ -321,13 +335,23 @@ class HsrPybulletEnv(gym.Env):
         obj_position_xyz, obj_quaternion_xyzw = self.get_object_pose()
         obs["object_pose"] = {"position_xyz": obj_position_xyz, "quaternion_xyzw": obj_quaternion_xyzw}
 
+        # if observation space is normalized, joint values have to normalized to [-1, 1]
+        if self.normalized_observation_space:
+            if verbose:
+                print("Normalizing joint values to range [-1, 1]:")
+            for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
+                joint_value = deepcopy(obs["joint_values"][i])
+                obs["joint_values"][i] = np.interp(obs["joint_values"][i], (self.joint_limits_lower[i], self.joint_limits_upper[i]), (-1.0, 1.0))
+                if verbose:
+                    print(f"\t{all_joint_names[i]}: {joint_value:.4f} --> %.4f" % obs["joint_values"][i])
+
         if verbose:
             print("OBSERVATION:")
             self.print_joint_values(obs["joint_values"], title="Joint values:", tab_indent=1)
-            print("\tBase velocity: X = %.5f, Y = %.5f, normalized = %.5f" % (obs["base_velocity"][0], obs["base_velocity"][1], np.linalg.norm(obs["base_velocity"])))
+            print("\tBase velocity: X = %.5f, Y = %.5f, L2 norm = %.5f" % (obs["base_velocity"][0], obs["base_velocity"][1], np.linalg.norm(obs["base_velocity"])))
             self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=1)
 
-        return self.convert_observation_dict_to_numpy(obs) if numpify else obs
+        return self.convert_observation_dict_to_numpy(obs, verbose) if numpify else obs
 
     def convert_observation_dict_to_numpy(self, obs: dict, verbose=False) -> np.array:
         """
@@ -341,7 +365,7 @@ class HsrPybulletEnv(gym.Env):
         l.extend(obs["object_pose"]["position_xyz"])
         l.extend(obs["object_pose"]["quaternion_xyzw"])
 
-        obs_numpified = np.array(l)
+        obs_numpified = np.array(l, dtype=np.float32)
 
         if verbose:
             print("Conversion from observation dictionary to numpy array:")
@@ -349,7 +373,7 @@ class HsrPybulletEnv(gym.Env):
             self.print_joint_values(obs["joint_values"], title="Joint values:", tab_indent=2)
             print("\t\tBase velocity: X = %.5f, Y = %.5f" % (obs["base_velocity"][0], obs["base_velocity"][1]))
             self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=2)
-            print(f"\tNumpy array (shape: {obs_numpified.shape}):\n{obs_numpified}")
+            print(f"\tNumpy array (shape: {obs_numpified.shape}, type: {type(obs_numpified)}, type of every element: {type(obs_numpified[0])}):\n{obs_numpified}")
 
         return obs_numpified
 
@@ -358,7 +382,7 @@ class HsrPybulletEnv(gym.Env):
         Converts observation numpy array to a dictionary (see observation_template).
         The parsing in this function is VERY STRONGLY tied to convert_observation_dict_to_numpy()
         """
-        assert obs.shape[0] == 24, "convert_observation_numpy_to_dict() expects an array of shape (24,)"
+        assert obs.shape[0] == self.observation_space_length, f"convert_observation_numpy_to_dict() expects an array of shape ({self.observation_space_length},)"
 
         d = deepcopy(observation_template)
         d["joint_values"] = obs[:15]   # 15 comes from number of joint values and is equal to self.num_dofs
@@ -374,6 +398,57 @@ class HsrPybulletEnv(gym.Env):
             self.print_pose(d["object_pose"]["position_xyz"], d["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=2)
 
         return d
+
+    def construct_observation_space(self, verbose=False):
+        """
+        Observation space will have a total of 24 elements (see observation_template):
+        - 15 joint values
+        - 2 base velocity X and Y components
+        - 3 object position XYZ
+        - 4 object orientation (quaternion XYZW)
+
+        If normalized_observation_space is True, joint values are normalized to [-1, 1] (rest are not normalized) 
+        """
+        lower = []
+        upper = []
+
+        # joint values (normalized between [-1.0, 1.0])
+        if self.normalized_observation_space:
+            lower.extend(np.ones(self.num_dofs, dtype=np.float32) * -1.0)
+            upper.extend(np.ones(self.num_dofs, dtype=np.float32))
+        else:
+            lower.extend(self.joint_limits_lower)
+            upper.extend(self.joint_limits_upper)
+
+        # Base velocity cannot be normalized because we don't know how high base velocity can go.
+        # L2-norm velocity was observed to go up to 150:
+        #     X component was found to fall in the range [-100, 100]
+        #     Y component was found to fall in the range [-100, 100]
+        #     so setting limits of X and Y components to [-120, 120] ¯\_(ツ)_/¯
+        lower.extend(np.ones(2, dtype=np.float32) * -120.0)
+        upper.extend(np.ones(2, dtype=np.float32) * 120.0)
+
+        # robot xy location is limited to (±10, ±10) and object is spawned in bounds [2.0, 7.0] (see spawn_object_at_random_location())
+        lower.extend(np.zeros(3, dtype=np.float32))
+        upper.extend(np.ones(3, dtype=np.float32) * 10.0)   # this assumes object's Z position will always be within [0, 10] meters
+
+        # robot orientation should already be a normalized quaternion (xyzw)
+        lower.extend(np.ones(4, dtype=np.float32) * -1.0)
+        upper.extend(np.ones(4, dtype=np.float32))
+
+        assert len(lower) == self.observation_space_length, f"construct_observation_space(): length of 'lower' should be equal to {self.observation_space_length}"
+        assert len(upper) == self.observation_space_length, f"construct_observation_space(): length of 'upper' should be equal to {self.observation_space_length}"
+
+        observation_space = spaces.Box(
+            np.array(lower).astype(np.float32),
+            np.array(upper).astype(np.float32),
+            dtype=np.float32
+        )
+
+        if verbose:
+            print(f"{Color.Cyan.value}Observation space{Color.Color_Off.value} (type: {type(observation_space)})\n{observation_space}")
+
+        return observation_space
 
     def calculate_reward(self):
         return 0.0
@@ -405,7 +480,7 @@ class HsrPybulletEnv(gym.Env):
     def sample_action_space(self):
         return self.action_space.sample()
     
-    def set_joint_position(self, q):
+    def set_joint_position(self, q, verbose=False):
         if len(q) != self.num_dofs:
             raise ValueError(f"set_joint_positions(): q has {len(q)} values but robot has {self.num_dofs} DOF")
 
@@ -451,19 +526,27 @@ class HsrPybulletEnv(gym.Env):
         start_time = time.time()
         error = self.get_error(q, self.get_joint_values())
         base_velocity = self.get_base_velocity(xy_components=False)
+        max_base_velocity = 0
+        max_base_velocity_xy = [0, 0]
         robot_has_started_moving = False
-        base_log_start, base_log_freq = start_time, 5.0
+        base_log_start, base_log_freq = start_time, 10.0
         while True:
             if not robot_has_started_moving and self.base_is_moving():
                 robot_has_started_moving = True
 
+            if base_velocity > max_base_velocity:
+                max_base_velocity = base_velocity
+                max_base_velocity_xy = self.get_base_velocity(xy_components=True)
+
             if time.time() - start_time > self.max_time_to_reach_goal:
-                print(f"TIMED OUT on its way to goal, L2 norm of error across all joints: {error:.4f}, base_velocity: {base_velocity:.4f}")
+                if verbose:
+                    print(f"{Color.Yellow.value}TIMED OUT on its way to goal{Color.Color_Off.value}, L2 norm of error across all joints: {error:.4f}, base_velocity: {base_velocity:.4f}")
                 break
             
             if error < self.error_tolerance and robot_has_started_moving and base_velocity <= 0.001:
-                print(f"REACHED GOAL in {time.time() - start_time:.4f} seconds, all joints error: {error:.4f},  base error: {self.get_base_error(q, self.get_joint_values()):.4f}, base velocity: {base_velocity:.4f}")
-                self.print_joint_values(self.get_joint_values(), title="Joint values at goal:")
+                if verbose:
+                    print(f"{Color.Green.value}REACHED GOAL in {time.time() - start_time:.4f} seconds{Color.Color_Off.value}, all joints error: {error:.4f}, base error: {self.get_base_error(q, self.get_joint_values()):.4f}, base velocity: {base_velocity:.4f}, max base velocity: {max_base_velocity:.4f} (components: {max_base_velocity_xy})")
+                    self.print_joint_values(self.get_joint_values(), title="Joint values at goal:", tab_indent=2)
                 break
             
             if time.time() - base_log_start > base_log_freq:
@@ -478,18 +561,19 @@ class HsrPybulletEnv(gym.Env):
             time.sleep(0.01)
             self.bullet_client.stepSimulation()
             error = self.get_error(q, self.get_joint_values())
-            base_velocity = np.linalg.norm(self.get_base_velocity())
+            base_velocity = self.get_base_velocity()
 
         self.bullet_client.removeUserDebugItem(line_id)
 
-    def reset(self):
+    def reset(self, verbose=False):
         self.remove_object_from_scene(self.added_obj_id)
 
-        print("================== RESET ========================")
+        if verbose:
+            print("================== RESET ========================")
         self.robot_body_unique_id.reset()
-        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=True)
+        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
 
-        return self.get_observation()
+        return self.get_observation(verbose=verbose, numpify=True)
 
     def render(self, mode="human", close=False):
         ...
