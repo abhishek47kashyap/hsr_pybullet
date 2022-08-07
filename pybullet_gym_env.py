@@ -59,7 +59,7 @@ CAMERA_REALSENSE_CONFIG = {
 
 observation_template = {
     "joint_values": None,
-    "base_velocity_normalized": None,
+    "base_velocity": None,
     "object_pose": None
 }
 
@@ -176,8 +176,13 @@ class HsrPybulletEnv(gym.Env):
         self.urdf_file_path = "hsrb_description/robots/hsrb.urdf"
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        self.connection_mode = p.GUI
+        gui = True
         hand = False
+
+        # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
+        self.normalized_action_space = True
+
+        self.connection_mode = p.GUI if gui else p.DIRECT
 
         self.gravity_enabled = True
         self.use_fixed_base = True
@@ -212,25 +217,36 @@ class HsrPybulletEnv(gym.Env):
             )
         self.robot_body_unique_id.torque_control = torque_control
 
-        self.num_joints = self.robot_body_unique_id.num_joints
-        self.num_dofs = self.robot_body_unique_id.num_dofs
+        self.num_joints = self.robot_body_unique_id.num_joints   # 15
+        self.num_dofs = self.robot_body_unique_id.num_dofs       # 50
 
         self.free_joint_indices = self.robot_body_unique_id.free_joint_indices
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
         self.joint_max_velocities, self.joint_max_forces = self.get_joint_max_velocities_and_forces()
 
-        self.action_space = spaces.Box(
-            np.array(self.joint_limits_lower).astype(np.float32),
-            np.array(self.joint_limits_upper).astype(np.float32),
-        )
+        if self.normalized_action_space:
+            self.action_space = spaces.Box(
+                np.ones(self.num_dofs, dtype=np.float32) * -1.0,
+                np.ones(self.num_dofs, dtype=np.float32)
+            )
+        else:
+            self.action_space = spaces.Box(
+                np.array(self.joint_limits_lower).astype(np.float32),
+                np.array(self.joint_limits_upper).astype(np.float32),
+            )
         self.observation_space = spaces.Box(
             np.array(self.joint_limits_lower).astype(np.float32),
             np.array(self.joint_limits_upper).astype(np.float32)
         )
 
-        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=True)
+        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
         # self.spin()
+        N = 3
+        for i in range(3):
+            print(f"-----------> Action {i+1}/{N}")
+            action = self.sample_action_space()
+            self.step(action)
 
     def close(self):
         self.px_client.release()
@@ -246,10 +262,21 @@ class HsrPybulletEnv(gym.Env):
 
         return self.add_object_to_scene(model_name, base_position, verbose)
 
-    def step(self, action: list):
+    def step(self, action: list, verbose=False):
+        """
+        action: expected to be normalized if action space is normalized
+        """
         done = False
         info = {}
 
+        # before applying action, scale it back up if action space is normalized
+        if self.normalized_action_space:
+            if verbose:
+                print("Scaling normalized joint value from [-1, 1] to joint limits:")
+            for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
+                normalized_value = deepcopy(action[i])
+                action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))
+                print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
         self.set_joint_position(action)
 
         obs = self.get_observation(verbose=False)
@@ -257,23 +284,27 @@ class HsrPybulletEnv(gym.Env):
 
         return obs, reward, done, info
 
-    def get_observation(self, verbose=False):
+    def get_observation(self, verbose=False, numpify=True):
         """
         Returns information about environment as a dict based on observation template
+
+        numpify: if True, then converts observation_template dict to numpy array
+                 (default value should be True else stable_baselines3.common.env_checker.check_env() fails)
         """
         obs = deepcopy(observation_template)
         obs["joint_values"] = self.get_joint_values()
-        obs["base_velocity_normalized"] = self.get_base_velocity(normalized=True)
+        obs["base_velocity"] = self.get_base_velocity(xy_components=True)
         obj_position_xyz, obj_quaternion_xyzw = self.get_object_pose()
         obs["object_pose"] = {"position_xyz": obj_position_xyz, "quaternion_xyzw": obj_quaternion_xyzw}
 
         if verbose:
             print("OBSERVATION:")
             self.print_joint_values(obs["joint_values"], title="Joint values:", tab_indent=1)
-            print("\tBase velocity: %.5f" % obs["base_velocity_normalized"])
+            print("\tBase velocity: X = %.5f, Y = %.5f, normalized = %.5f" % (obs["base_velocity"][0], obs["base_velocity"][1], np.linalg.norm(obs["base_velocity"])))
             self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=1)
 
-        return obs
+        # https://www.geeksforgeeks.org/how-to-convert-a-dictionary-into-a-numpy-array/
+        return np.array(list(obs.items()), dtype=object) if numpify else obs
 
     def calculate_reward(self):
         return 0.0
@@ -297,12 +328,12 @@ class HsrPybulletEnv(gym.Env):
         return proximity
 
     def base_is_moving(self) -> bool:
-        return self.get_base_velocity(normalized=True) > self.is_base_moving_threshold
+        return self.get_base_velocity(xy_components=False) > self.is_base_moving_threshold
 
     def gripper_close_enough_to_grasp_object(self) -> bool:
         ...
 
-    def get_random_joint_config(self):
+    def sample_action_space(self):
         return self.action_space.sample()
     
     def set_joint_position(self, q):
@@ -350,7 +381,7 @@ class HsrPybulletEnv(gym.Env):
 
         start_time = time.time()
         error = self.get_error(q, self.get_joint_values())
-        base_velocity = self.get_base_velocity(normalized=True)
+        base_velocity = self.get_base_velocity(xy_components=False)
         robot_has_started_moving = False
         base_log_start, base_log_freq = start_time, 5.0
         while True:
@@ -416,8 +447,6 @@ class HsrPybulletEnv(gym.Env):
     
     def spin(self):
         while True:
-            # self.get_joint_values(verbose=True)
-            # print(f"SPINNING: Base velocity: {self.get_base_velocity()}")
             width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             self.bullet_client.stepSimulation()
             time.sleep(0.01)
@@ -540,9 +569,12 @@ class HsrPybulletEnv(gym.Env):
     def get_base_position_xy(self):
         return self.get_joint_values()[:2]   # first two elements are x and y
     
-    def get_base_velocity(self, normalized=False):
+    def get_base_velocity(self, xy_components=False):
+        """
+        Returns X and Y components of base velocity if xy_components is true, else L2-norm of X and Y components
+        """
         base_vel = self.get_joint_velocities()[:2]  # X and Y components
-        return np.linalg.norm(base_vel) if normalized else base_vel
+        return base_vel if xy_components else np.linalg.norm(base_vel)
 
     def calculate_inverse_kinematics(self, position_xyz: tuple, quaternion_xyzw: tuple, verbose=False):
         if verbose:
