@@ -62,7 +62,10 @@ CAMERA_REALSENSE_CONFIG = {
 observation_template = {
     "joint_values": None,
     "base_velocity": None,
-    "object_pose": None
+    "object_pose": {
+        "position_xyz": None,
+        "quaternion_xyzw": None
+    }
 }
 
 reward_values = {
@@ -196,13 +199,14 @@ class HsrPybulletEnv(gym.Env):
 
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        gui = False
+        gui = True
         hand = False
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_space = True
 
         self.connection_mode = p.GUI if gui else p.DIRECT
+        print(f"{Color.Green.value}GUI mode is %s{Color.Color_Off.value}" % ("enabled" if gui else "disabled"))
 
         self.gravity_enabled = True
         self.use_fixed_base = True
@@ -263,7 +267,7 @@ class HsrPybulletEnv(gym.Env):
 
         # self.spin()
         # N = 3
-        # for i in range(3):
+        # for i in range(N):
         #     print(f"-----------> Action {i+1}/{N}")
         #     action = self.sample_action_space()
         #     self.step(action)
@@ -323,8 +327,53 @@ class HsrPybulletEnv(gym.Env):
             print("\tBase velocity: X = %.5f, Y = %.5f, normalized = %.5f" % (obs["base_velocity"][0], obs["base_velocity"][1], np.linalg.norm(obs["base_velocity"])))
             self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=1)
 
-        # https://www.geeksforgeeks.org/how-to-convert-a-dictionary-into-a-numpy-array/
-        return np.array(list(obs.items()), dtype=object) if numpify else obs
+        return self.convert_observation_dict_to_numpy(obs) if numpify else obs
+
+    def convert_observation_dict_to_numpy(self, obs: dict, verbose=False) -> np.array:
+        """
+        Converts observation dictionary (see observation_template) into a 1D numpy array.
+        If modifying this method, also update convert_observation_numpy_to_dict()
+        """
+
+        l = []
+        l.extend(obs["joint_values"])
+        l.extend(obs["base_velocity"])
+        l.extend(obs["object_pose"]["position_xyz"])
+        l.extend(obs["object_pose"]["quaternion_xyzw"])
+
+        obs_numpified = np.array(l)
+
+        if verbose:
+            print("Conversion from observation dictionary to numpy array:")
+            print("\tDictionary:")
+            self.print_joint_values(obs["joint_values"], title="Joint values:", tab_indent=2)
+            print("\t\tBase velocity: X = %.5f, Y = %.5f" % (obs["base_velocity"][0], obs["base_velocity"][1]))
+            self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=2)
+            print(f"\tNumpy array (shape: {obs_numpified.shape}):\n{obs_numpified}")
+
+        return obs_numpified
+
+    def convert_observation_numpy_to_dict(self, obs: np.array, verbose=False) -> dict:
+        """
+        Converts observation numpy array to a dictionary (see observation_template).
+        The parsing in this function is VERY STRONGLY tied to convert_observation_dict_to_numpy()
+        """
+        assert obs.shape[0] == 24, "convert_observation_numpy_to_dict() expects an array of shape (24,)"
+
+        d = deepcopy(observation_template)
+        d["joint_values"] = obs[:15]   # 15 comes from number of joint values and is equal to self.num_dofs
+        d["base_velocity"] = obs[15:17]
+        d["object_pose"] = {"position_xyz": obs[17:20], "quaternion_xyzw": obs[20:]}
+
+        if verbose:
+            print("Conversion from observation numpy array to dictionary:")
+            print(f"\tNumpy array (shape: {obs.shape}):\n{obs}")
+            print("\tDictionary:")
+            self.print_joint_values(d["joint_values"], title="Joint values:", tab_indent=2)
+            print("\t\tBase velocity: X = %.5f, Y = %.5f" % (d["base_velocity"][0], d["base_velocity"][1]))
+            self.print_pose(d["object_pose"]["position_xyz"], d["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=2)
+
+        return d
 
     def calculate_reward(self):
         return 0.0
@@ -755,4 +804,15 @@ class HsrPybulletEnv(gym.Env):
 
 if __name__ == "__main__":
     env = HsrPybulletEnv()
-    check_env(env)
+    # check_env(env)
+
+    # "DRY RUN"
+    obs = env.reset()
+    n_steps = 10
+    for i in range(n_steps):
+        print(f"Random action {i+1}/{n_steps}")
+        # Random action
+        action = env.action_space.sample()
+        obs, reward, done, info = env.step(action)
+        if done:
+            obs = env.reset()
