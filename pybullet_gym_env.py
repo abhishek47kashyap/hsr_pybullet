@@ -158,6 +158,17 @@ all_joint_names = [  # order is important
 def file_exists(filepath: str) -> bool:
     return os.path.exists(filepath)
 
+
+class Color(Enum):
+    Red = "\033[0;31m"   
+    Green = "\033[0;32m"
+    Yellow = "\033[0;33m"
+    Blue = "\033[0;34m"
+    Purple = "\033[0;35m"
+    Cyan = "\033[0;36m"
+    White = "\033[0;37m"
+
+    Color_Off = "\033[0m"
 class JointName(Enum):
     joint_x = all_joint_names[0]
     joint_y = all_joint_names[1]
@@ -181,11 +192,11 @@ class HsrPybulletEnv(gym.Env):
 
         self.urdf_file_path = "hsrb_description/robots/hsrb.urdf"
         if not file_exists(self.urdf_file_path):
-            print(f"ERROR! Urdf filepath does not exist: {self.urdf_file_path}")
+            print(f"{Color.Red.value}ERROR! Urdf filepath does not exist: {self.urdf_file_path}{Color.Color_Off.value}")
 
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        gui = True
+        gui = False
         hand = False
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
@@ -251,11 +262,11 @@ class HsrPybulletEnv(gym.Env):
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
         # self.spin()
-        N = 3
-        for i in range(3):
-            print(f"-----------> Action {i+1}/{N}")
-            action = self.sample_action_space()
-            self.step(action)
+        # N = 3
+        # for i in range(3):
+        #     print(f"-----------> Action {i+1}/{N}")
+        #     action = self.sample_action_space()
+        #     self.step(action)
 
     def close(self):
         self.px_client.release()
@@ -688,10 +699,10 @@ class HsrPybulletEnv(gym.Env):
         collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
         file_not_found = False
         if not file_exists(mesh_path):
-            print(f"ERROR! Mesh filepath for {model_name} does not exist: {mesh_path}")
+            print(f"{Color.Red.value}ERROR! Mesh filepath for {model_name} does not exist: {mesh_path}{Color.Color_Off.value}")
             file_not_found = True
         if not file_exists(collision_path):
-            print(f"ERROR! Collision filepath for {model_name} does not exist: {collision_path}")
+            print(f"{Color.Red.value}ERROR! Collision filepath for {model_name} does not exist: {collision_path}{Color.Color_Off.value}")
             file_not_found = True
         if file_not_found:
             sys.exit()
@@ -744,4 +755,4 @@ class HsrPybulletEnv(gym.Env):
 
 if __name__ == "__main__":
     env = HsrPybulletEnv()
-    # check_env(env)
+    check_env(env)
