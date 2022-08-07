@@ -230,62 +230,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=True)
 
-        # print(f"Checking for existence of addUserDebugLine: {self.bullet_client.addUserDebugLine}")
-        # random_action = self.get_random_joint_config()
-        # random_action = [-0.30553615, -3.0663216, -8.185578, 0.07727123, -0.56605875, -0.44894674, 0.06767046, -1.6455808, 0.16513418, -0.85248154, -1.7382416, 0.15633392, -0.7695309, 0.39886168, -0.03402488]
-        # random_action = [-5.0677767, -9.812688,  -3.4465344, 0.34411412, -1.1459529, -0.9748333, 0.23610148, -2.1307828, -0.70618105, -0.8699218, 1.338886, -0.77597266, -0.3975988, -0.58280176, 0.685311]
-        # random_action = self.get_joint_values()
-        # random_action[0] = 5.0
-        # random_action[1] = 5.0
-        # print(f"Sample action: {random_action}")
-        # time.sleep(2)
-        # self.step(random_action)
-
-        N = 2
-        for i in range(N):
-            # if (i % 2) == 0:
-            #     print("Will close gripper in 3 seconds")
-            #     time.sleep(3)
-            #     self.gripper_close()
-            #     print("gripper should be closed")
-            # else:
-            #     print("Will open gripper in 3 seconds")
-            #     time.sleep(3)
-            #     self.gripper_open()
-            #     print("gripper should be open")
-            random_action = self.get_random_joint_config()
-            print(f"Sample action {i+1}/{N}: {random_action}")
-            self.step(random_action)
-
-        # position_xyz = list(position_xyz)
-        # position_xyz[2] += 0.1
-        # position_xyz = tuple(position_xyz)
-        # quaternion_xyzw = list(quaternion_xyzw)
-        # quaternion_xyzw[1] = 1.0
-        # quaternion_xyzw[3] = 0.0
-        # quaternion_xyzw = tuple(quaternion_xyzw)
-        # ik_solution = self.calculate_inverse_kinematics(position_xyz, quaternion_xyzw, True)
-        # fk_solution = self.calculate_forward_kinematics(ik_solution, True)
-        # self.step(action=ik_solution)
-
         # self.spin()
-
-        print("Will call reset in 3 seconds")
-        time.sleep(3)
-        self.reset()
-        print("Reset has been called, will continue in 5 seconds")
-        time.sleep(5)
-
-        for i in range(N):
-            random_action = self.get_random_joint_config()
-            print(f"Sample action {i+1}/{N}: {random_action}")
-            self.step(random_action)
-
-        print("Will call reset in 3 seconds")
-        time.sleep(3)
-        self.reset()
-        print("Reset has been called, will quit in 5 seconds")
-        time.sleep(5)
 
     def close(self):
         self.px_client.release()
