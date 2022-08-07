@@ -254,8 +254,8 @@ class HsrPybulletEnv(gym.Env):
         self.joint_max_velocities, self.joint_max_forces = self.get_joint_max_velocities_and_forces()
 
         self.observation_space_length = 24  # 15 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
-        self.observation_space = self.construct_observation_space(verbose=True)
-        self.action_space = self.construct_action_space(verbose=True)
+        self.observation_space = self.construct_observation_space()
+        self.action_space = self.construct_action_space()
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
