@@ -17,6 +17,7 @@ from enum import Enum
 from copy import deepcopy
 from scipy.spatial.transform import Rotation as R
 import time
+import random
 
 import trimesh
 
@@ -60,6 +61,24 @@ observation_template = {
     "joint_values": None,
     "base_velocity_normalized": None,
     "object_pose": None
+}
+
+reward_values = {
+    "object_not_grasped":
+    {
+        "base_is_mobile": 5,
+        "getting_closer_to_object": 3,
+        "penalty": -2
+    },
+    "grasping_in_progress":   # gripper_close_enough_to_grasp_object()
+    {
+        "base_is_mobile": 20,
+    },
+    "object_grasped":
+    {
+        "grasp_success": 20,
+        "base_is_mobile": 10,
+    }
 }
 
 """
@@ -155,6 +174,7 @@ class HsrPybulletEnv(gym.Env):
         super().__init__()
 
         self.urdf_file_path = "hsrb_description/robots/hsrb.urdf"
+        self.object_model_name = "002_master_chef_can"
         torque_control = True
         self.connection_mode = p.GUI
         hand = False
@@ -163,6 +183,7 @@ class HsrPybulletEnv(gym.Env):
         self.use_fixed_base = True
 
         self.error_tolerance = 1.0
+        self.is_base_moving_threshold = 1.0
         self.max_time_to_reach_goal = 20  # seconds allowed to reach goal
 
         self.camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
@@ -207,9 +228,7 @@ class HsrPybulletEnv(gym.Env):
             np.array(self.joint_limits_upper).astype(np.float32)
         )
 
-        self.added_obj_id = self.add_object_to_scene(model_name="002_master_chef_can", base_position=(2.0, 2.0, 0))
-        position_xyz, quaternion_xyzw = self.get_object_pose()
-        self.print_pose(position_xyz, quaternion_xyzw, title="Object position:")
+        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=True)
 
         # print(f"Checking for existence of addUserDebugLine: {self.bullet_client.addUserDebugLine}")
         # random_action = self.get_random_joint_config()
@@ -222,21 +241,21 @@ class HsrPybulletEnv(gym.Env):
         # time.sleep(2)
         # self.step(random_action)
 
-        N = 4
+        N = 2
         for i in range(N):
-            if (i % 2) == 0:
-                print("Will close gripper in 3 seconds")
-                time.sleep(3)
-                self.gripper_close()
-                print("gripper should be closed")
-            else:
-                print("Will open gripper in 3 seconds")
-                time.sleep(3)
-                self.gripper_open()
-                print("gripper should be open")
-            # random_action = self.get_random_joint_config()
-            # print(f"Sample action {i+1}/{N}: {random_action}")
-            # self.step(random_action)
+            # if (i % 2) == 0:
+            #     print("Will close gripper in 3 seconds")
+            #     time.sleep(3)
+            #     self.gripper_close()
+            #     print("gripper should be closed")
+            # else:
+            #     print("Will open gripper in 3 seconds")
+            #     time.sleep(3)
+            #     self.gripper_open()
+            #     print("gripper should be open")
+            random_action = self.get_random_joint_config()
+            print(f"Sample action {i+1}/{N}: {random_action}")
+            self.step(random_action)
 
         # position_xyz = list(position_xyz)
         # position_xyz[2] += 0.1
@@ -251,8 +270,36 @@ class HsrPybulletEnv(gym.Env):
 
         # self.spin()
 
+        print("Will call reset in 3 seconds")
+        time.sleep(3)
+        self.reset()
+        print("Reset has been called, will continue in 5 seconds")
+        time.sleep(5)
+
+        for i in range(N):
+            random_action = self.get_random_joint_config()
+            print(f"Sample action {i+1}/{N}: {random_action}")
+            self.step(random_action)
+
+        print("Will call reset in 3 seconds")
+        time.sleep(3)
+        self.reset()
+        print("Reset has been called, will quit in 5 seconds")
+        time.sleep(5)
+
     def close(self):
         self.px_client.release()
+
+    def spawn_object_at_random_location(self, model_name: str, verbose=False):
+        min_xy = 2.0
+        max_xy = 7.0   # robot xy location is limited to (±10, ±10)
+
+        base_position = [random.uniform(min_xy, max_xy) for i in range(2)]
+        base_position.append(0.0)
+
+        base_position = tuple(base_position)
+
+        return self.add_object_to_scene(model_name, base_position, verbose)
 
     def step(self, action: list):
         done = False
@@ -261,8 +308,14 @@ class HsrPybulletEnv(gym.Env):
         self.set_joint_position(action)
 
         obs = self.get_observation(verbose=False)
+        reward = self.calculate_reward()
+
+        return obs, reward, done, info
 
     def get_observation(self, verbose=False):
+        """
+        Returns information about environment as a dict based on observation template
+        """
         obs = deepcopy(observation_template)
         obs["joint_values"] = self.get_joint_values()
         obs["base_velocity_normalized"] = self.get_base_velocity(normalized=True)
@@ -276,7 +329,34 @@ class HsrPybulletEnv(gym.Env):
             self.print_pose(obs["object_pose"]["position_xyz"], obs["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=1)
 
         return obs
-    
+
+    def calculate_reward(self):
+        return 0.0
+
+    def object_grasped(self) -> bool:
+        return False
+
+    def calculate_base_proximity_to_object(self, verbose=False):
+        robot_base_position = self.get_base_position_xy()  # [x, y]
+        object_position_xyz, _ = self.get_object_pose()    # (x, y, z)
+        object_position_xyz = list(object_position_xyz[:2])
+
+        proximity = np.linalg.norm(np.array(robot_base_position) - np.array(object_position_xyz))
+
+        if verbose:
+            print("calculate_base_proximity_to_object():")
+            print(f"\trobot base position: {robot_base_position}")
+            print(f"\tobject position: {object_position_xyz}")
+            print(f"\tproximity: {proximity}m")
+
+        return proximity
+
+    def base_is_moving(self) -> bool:
+        return self.get_base_velocity(normalized=True) > self.is_base_moving_threshold
+
+    def gripper_close_enough_to_grasp_object(self) -> bool:
+        ...
+
     def get_random_joint_config(self):
         return self.action_space.sample()
     
@@ -329,7 +409,7 @@ class HsrPybulletEnv(gym.Env):
         robot_has_started_moving = False
         base_log_start, base_log_freq = start_time, 5.0
         while True:
-            if not robot_has_started_moving and base_velocity > 1.0:
+            if not robot_has_started_moving and self.base_is_moving():
                 robot_has_started_moving = True
 
             if time.time() - start_time > self.max_time_to_reach_goal:
@@ -356,9 +436,15 @@ class HsrPybulletEnv(gym.Env):
             base_velocity = np.linalg.norm(self.get_base_velocity())
 
         self.bullet_client.removeUserDebugItem(line_id)
-    
+
     def reset(self):
+        self.remove_object_from_scene(self.added_obj_id)
+
+        print("================== RESET ========================")
         self.robot_body_unique_id.reset()
+        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=True)
+
+        return self.get_observation()
 
     def render(self, mode="human", close=False):
         ...
@@ -611,7 +697,7 @@ class HsrPybulletEnv(gym.Env):
             )
         return position_xyz, quaternion_xyzw
     
-    def add_object_to_scene(self, model_name: str, base_position: tuple):
+    def add_object_to_scene(self, model_name: str, base_position: tuple, verbose=False):
         mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
         collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
         mesh = trimesh.load(mesh_path, force='mesh', process=False)
@@ -648,7 +734,16 @@ class HsrPybulletEnv(gym.Env):
 
         self.bullet_client.changeDynamics(obj_id, -1, lateralFriction=0.25)
 
+        if verbose:
+            self.print_pose(list(base_position), [0.0, 0.0, 0.0, 1.0], title="Object \"" + model_name + "\" pose")
+
         return obj_id
+
+    def remove_object_from_scene(self, object_id):
+        """
+        https://github.com/bulletphysics/bullet3/issues/1389
+        """
+        self.bullet_client.removeBody(object_id)
 
 
 if __name__ == "__main__":
