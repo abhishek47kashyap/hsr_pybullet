@@ -246,8 +246,8 @@ class HsrPybulletEnv(gym.Env):
         print()
         self.robot_body_unique_id.torque_control = torque_control
 
-        self.num_joints = self.robot_body_unique_id.num_joints   # 15
-        self.num_dofs = self.robot_body_unique_id.num_dofs       # 50
+        self.num_joints = self.robot_body_unique_id.num_joints   # 50
+        self.num_dofs = self.robot_body_unique_id.num_dofs       # 15
 
         self.free_joint_indices = self.robot_body_unique_id.free_joint_indices
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
@@ -447,8 +447,15 @@ class HsrPybulletEnv(gym.Env):
         lower.extend(np.ones(4, dtype=np.float32) * -1.0)
         upper.extend(np.ones(4, dtype=np.float32))
 
-        assert len(lower) == self.observation_space_length, f"construct_observation_space(): length of 'lower' should be equal to {self.observation_space_length}"
-        assert len(upper) == self.observation_space_length, f"construct_observation_space(): length of 'upper' should be equal to {self.observation_space_length}"
+        early_exit = False
+        if len(lower) != self.observation_space_length:
+            print(f"{Color.Red.value}construct_observation_space(): length of 'lower' is {len(lower)} but should be equal to {self.observation_space_length}{Color.Color_Off.value}")
+            early_exit = True
+        if len(upper) != self.observation_space_length:
+            print(f"{Color.Red.value}construct_observation_space(): length of 'upper' is {len(lower)} but should be equal to {self.observation_space_length}{Color.Color_Off.value}")
+            early_exit = True
+        if early_exit:
+            sys.exit()
 
         observation_space = spaces.Box(
             np.array(lower).astype(np.float32),
