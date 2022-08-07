@@ -252,18 +252,9 @@ class HsrPybulletEnv(gym.Env):
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
         self.joint_max_velocities, self.joint_max_forces = self.get_joint_max_velocities_and_forces()
 
-        if self.normalized_action_space:
-            self.action_space = spaces.Box(
-                np.ones(self.num_dofs, dtype=np.float32) * -1.0,
-                np.ones(self.num_dofs, dtype=np.float32)
-            )
-        else:
-            self.action_space = spaces.Box(
-                np.array(self.joint_limits_lower).astype(np.float32),
-                np.array(self.joint_limits_upper).astype(np.float32),
-            )
         self.observation_space_length = 24  # 15 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
-        self.observation_space = self.construct_observation_space(verbose=False)
+        self.observation_space = self.construct_observation_space(verbose=True)
+        self.action_space = self.construct_action_space(verbose=True)
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
@@ -398,6 +389,28 @@ class HsrPybulletEnv(gym.Env):
             self.print_pose(d["object_pose"]["position_xyz"], d["object_pose"]["quaternion_xyzw"], title="Object pose:", tab_indent=2)
 
         return d
+
+    def construct_action_space(self, verbose=False):
+        """
+        Action space will have a total of 15 elements (same as the number of degrees of freedom i.e. self.num_dofs)
+
+        If normalized_action_space is True, joint values are normalized to [-1, 1]
+        """
+        if self.normalized_action_space:
+            action_space = spaces.Box(
+                np.ones(self.num_dofs, dtype=np.float32) * -1.0,
+                np.ones(self.num_dofs, dtype=np.float32)
+            )
+        else:
+            action_space = spaces.Box(
+                np.array(self.joint_limits_lower).astype(np.float32),
+                np.array(self.joint_limits_upper).astype(np.float32),
+            )
+
+        if verbose:
+            print(f"{Color.Cyan.value}Action space{Color.Color_Off.value} (type: {type(action_space)})\n{action_space}")
+
+        return action_space
 
     def construct_observation_space(self, verbose=False):
         """
@@ -549,7 +562,7 @@ class HsrPybulletEnv(gym.Env):
                     self.print_joint_values(self.get_joint_values(), title="Joint values at goal:", tab_indent=2)
                 break
             
-            if time.time() - base_log_start > base_log_freq:
+            if verbose and time.time() - base_log_start > base_log_freq:
                 base_log_start = time.time()
                 print("Currently:")
                 print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values()):.4f}, all joint error: {error}")
@@ -891,12 +904,12 @@ if __name__ == "__main__":
     # check_env(env)
 
     # "DRY RUN"
-    obs = env.reset()
-    n_steps = 10
-    for i in range(n_steps):
-        print(f"Random action {i+1}/{n_steps}")
-        # Random action
-        action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)
-        if done:
-            obs = env.reset()
+    # obs = env.reset()
+    # n_steps = 10
+    # for i in range(n_steps):
+    #     print(f"Random action {i+1}/{n_steps}")
+    #     # Random action
+    #     action = env.action_space.sample()
+    #     obs, reward, done, info = env.step(action)
+    #     if done:
+    #         obs = env.reset()
