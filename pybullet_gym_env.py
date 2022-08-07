@@ -20,6 +20,7 @@ import time
 import random
 import os
 import sys
+import threading
 
 import trimesh
 
@@ -258,14 +259,11 @@ class HsrPybulletEnv(gym.Env):
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
-        # self.spin()
-        # N = 3
-        # for i in range(N):
-        #     print(f"-----------> Action {i+1}/{N}")
-        #     action = self.sample_action_space()
-        #     self.step(action)
+        self.camera_thread = threading.Thread(target=self.spin)
+        self.camera_thread.start()
 
     def close(self):
+        self.camera_thread.join()
         self.px_client.release()
 
     def spawn_object_at_random_location(self, model_name: str, verbose=False):
@@ -572,7 +570,7 @@ class HsrPybulletEnv(gym.Env):
                     print(f"\t\t{all_joint_names[i]}: {current_joint_values[i]:.4f} (target: {q[i]:.4f}, error: {q[i] - current_joint_values[i]:.4f})")
 
             time.sleep(0.01)
-            self.bullet_client.stepSimulation()
+            # self.bullet_client.stepSimulation()   # already running in a parallel thread that's executing self.spin()
             error = self.get_error(q, self.get_joint_values())
             base_velocity = self.get_base_velocity()
 
@@ -615,7 +613,7 @@ class HsrPybulletEnv(gym.Env):
         while True:
             width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             self.bullet_client.stepSimulation()
-            time.sleep(0.01)
+            time.sleep(0.001)
 
     def print_joint_values(self, q, title=None, tab_indent=0):
         if len(q) != self.num_dofs:
