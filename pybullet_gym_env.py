@@ -205,6 +205,13 @@ class HsrPybulletEnv(gym.Env):
         gui = True
         hand = False
 
+        self.done = False
+        self.episode_start_time = None
+        self.episode_max_duration = 60   # seconds
+
+        self.previous_proximity_to_object = float('inf')
+        self.proximity_change_threshold = 1.0  # meter
+
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_space = True
         self.normalized_observation_space = True
@@ -283,7 +290,6 @@ class HsrPybulletEnv(gym.Env):
         """
         action: expected to be normalized if action space is normalized
         """
-        done = False
         info = {}
 
         # before applying action, scale it back up if action space is normalized
@@ -309,8 +315,54 @@ class HsrPybulletEnv(gym.Env):
                 color = Color.Color_Off.value if self.observation_space.low[i] <= obs[i] <= self.observation_space.high[i] else Color.Red.value
                 print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]}, upper limit {self.observation_space.high[i]}{Color.Color_Off.value}")
 
-        return obs, reward, done, info
+        self.done = False # self.terminate_episode()
+        
+        return obs, reward, self.done, info
 
+    def terminate_episode(self) -> bool:
+        """
+        Episode termination criteria;
+            - episode duration has exceeded max episode duration
+            - robot went outside square area of ±10m
+            - robot is moving away from target without grabbing object
+            - robot link that that does not have "hand" or "wrist" in its name has collided with object (will likely send the object flying away)
+        """
+        if self.done:
+            print(f"{Color.Red.value}terminate_episode(): no episode is active{Color.Color_Off.value}")
+            return False
+        
+        # episode duration has exceeded max episode duration
+        if (time.time() - self.episode_start_time) >= self.episode_max_duration:
+            print(f"{Color.Red.value}terminate_episode(): max episode duration {self.episode_max_duration}s exceeded{Color.Color_Off.value}")
+            return True
+        
+        # robot went outside square area of ±10m
+        current_base_position_xy = self.get_base_position_xy()  # [x, y]
+        if (current_base_position_xy[0] > self.joint_limits_upper[0]) or (current_base_position_xy[1] > self.joint_limits_upper[1]):
+            print(f"{Color.Red.value}terminate_episode(): robot went outside square of ±10m{Color.Color_Off.value}")
+            return True
+        
+        # robot is moving away from target without grabbing object
+        current_proximity_to_object = self.calculate_base_proximity_to_object()
+        if not self.object_grasped():
+            if current_proximity_to_object - self.previous_proximity_to_object > self.proximity_change_threshold:
+                print(f"""{Color.Red.value}terminate_episode(): proximity is not decreasing, 
+                currently {current_proximity_to_object}m from object, 
+                previously {self.previous_proximity_to_object}m from object, 
+                threshold {self.proximity_change_threshold}m{Color.Color_Off.value}""")
+                return True
+        self.previous_proximity_to_object = deepcopy(current_proximity_to_object)
+
+        return False
+
+    
+    def start_episode(self):
+        print(f"{Color.Blue.value}Starting episode..{Color.Color_Off.value}")
+        self.episode_start_time = time.time()
+
+        self.done = False
+        self.previous_proximity_to_object = float('inf')
+    
     def get_observation(self, verbose=False, numpify=True):
         """
         Returns information about environment as a dict based on observation template
@@ -472,6 +524,7 @@ class HsrPybulletEnv(gym.Env):
         return 0.0
 
     def object_grasped(self) -> bool:
+        print(f"{Color.Yellow.value}object_grasped() was called but it's not implemented{Color.Color_Off.value}")
         return False
 
     def calculate_base_proximity_to_object(self, verbose=False):
@@ -593,6 +646,17 @@ class HsrPybulletEnv(gym.Env):
 
         return self.get_observation(verbose=verbose, numpify=True)
 
+    def collided_with_object(self, exclude_hand_and_wrist=True, verbose=False) -> bool:
+        points = self.bullet_client.getContactPoints(
+            bodyA=self.robot_body_unique_id.id,
+            bodyB=self.added_obj_id,
+            physicsClientId=self.bullet_client._client
+        )
+        if len(points) > 0:
+            print(f"Contact made (length of tuple:{len(points)}):\n")
+            for i in range(len(points)):
+                print(f"{Color.Red.value}index {i}{Color.Color_Off.value}:\n{points[i]}")
+    
     def render(self, mode="human", close=False):
         ...
 
@@ -620,6 +684,7 @@ class HsrPybulletEnv(gym.Env):
         while True:
             width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             self.bullet_client.stepSimulation()
+            self.collided_with_object()
             time.sleep(0.001)
 
     def print_joint_values(self, q, title=None, tab_indent=0):
@@ -910,11 +975,13 @@ if __name__ == "__main__":
 
     # "DRY RUN"
     # obs = env.reset()
+    # home_joint_values = obs[:15]
     # n_steps = 10
     # for i in range(n_steps):
     #     print(f"Random action {i+1}/{n_steps}")
     #     # Random action
     #     action = env.action_space.sample()
+    #     action[2:] = home_joint_values[2:]
     #     obs, reward, done, info = env.step(action)
     #     if done:
     #         obs = env.reset()
