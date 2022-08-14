@@ -353,9 +353,13 @@ class HsrPybulletEnv(gym.Env):
                 return True
         self.previous_proximity_to_object = deepcopy(current_proximity_to_object)
 
+        # robot link that is not a "hand" or "wrist" link has collided with object
+        if self.collided_with_object(exclude_hand_and_wrist=True):
+            print(f"{Color.Red.value}terminate_episode(): collision with object{Color.Color_Off.value}")
+            return True
+
         return False
 
-    
     def start_episode(self):
         print(f"{Color.Blue.value}Starting episode..{Color.Color_Off.value}")
         self.episode_start_time = time.time()
@@ -646,17 +650,71 @@ class HsrPybulletEnv(gym.Env):
 
         return self.get_observation(verbose=verbose, numpify=True)
 
-    def collided_with_object(self, exclude_hand_and_wrist=True, verbose=False) -> bool:
-        points = self.bullet_client.getContactPoints(
+    def collided_with_object(self, exclude_hand_and_wrist: bool, verbose=False) -> bool:
+        """
+        Contacts are NOT computed in real-time when this method is called.
+        This method works with contact points computed during the most recent call to to stepSimulation() or performCollisionDetection()
+
+        exclude_hand_and_wrist: if True, collision with robot link names that have "wrist" or "hand" in them will be ignored
+        verbose: if True, names of robot links that collide and corresponding penetration depths will be logged
+        """
+        contacts = self.bullet_client.getContactPoints(
             bodyA=self.robot_body_unique_id.id,
             bodyB=self.added_obj_id,
             physicsClientId=self.bullet_client._client
         )
-        if len(points) > 0:
-            print(f"Contact made (length of tuple:{len(points)}):\n")
-            for i in range(len(points)):
-                print(f"{Color.Red.value}index {i}{Color.Color_Off.value}:\n{points[i]}")
-    
+
+        collided = False
+        collisions = {}
+        if len(contacts) > 0:
+            for i in range(len(contacts)):
+                # each contact is a tuple of length 14
+                contactFlag = contacts[i][0]         # reserved (always found to be 0)
+                bodyUniqueIdA = contacts[i][1]       # body unique id of body A (always found to be 1)
+                bodyUniqueIdB = contacts[i][2]       # body unique id of body B (always found to be 2)
+                linkIndexA = contacts[i][3]          # link index of body A, -1 for base
+                linkIndexB = contacts[i][4]          # link index of body B, -1 for base (always found to be -1, which represents "base")
+                positionOnA = contacts[i][5]         # contact position on A, in Cartesian world coordinates
+                positionOnB = contacts[i][6]         # contact position on B, in Cartesian world coordinates
+                contactNormalOnB = contacts[i][7]    # contact normal on B, pointing towards A
+                contactDistance = contacts[i][8]     # contact distance, positive for separation, negative for penetration
+                normalForce = contacts[i][9]         # normal force applied during the last 'stepSimulation'
+                # 10-13 are lateral friction
+
+                if contactDistance < 0:
+                    robot_link_name = self.get_link_name_from_index(linkIndexA)
+
+                    if exclude_hand_and_wrist and ("hand" in robot_link_name or "wrist" in robot_link_name):
+                        continue
+
+                    collided = True
+                    if verbose:
+                        if (robot_link_name in collisions.keys() and contactDistance > collisions[robot_link_name]) or (robot_link_name not in collisions.keys()):
+                            collisions[robot_link_name] = deepcopy(contactDistance)
+                    else:
+                        break   # if not verbose, no point iterating over all contacts
+
+        if verbose and collided:
+            print(f"{Color.Red.value}collided_with_object():{Color.Color_Off.value}")
+            for link_name in collisions.keys():
+                print(f"\t{link_name}: {collisions[link_name]:.6f}")
+
+        return collided
+
+    def get_link_name_from_index(self, link_index: int) -> str:
+        """
+        Returns link name for an input link_index (should be >= -1)
+        """
+        if link_index == -1:
+            return "base"  # see documentation for getContactPoints()
+        else:
+            joint_info = self.bullet_client.getJointInfo(
+                bodyUniqueId=self.robot_body_unique_id.id,
+                jointIndex=link_index,  # in pybullet documentation, link index == joint index
+                physicsClientId=self.bullet_client._client
+            )
+            return joint_info.link_name.decode("utf-8")
+
     def render(self, mode="human", close=False):
         ...
 
@@ -684,7 +742,6 @@ class HsrPybulletEnv(gym.Env):
         while True:
             width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             self.bullet_client.stepSimulation()
-            self.collided_with_object()
             time.sleep(0.001)
 
     def print_joint_values(self, q, title=None, tab_indent=0):
