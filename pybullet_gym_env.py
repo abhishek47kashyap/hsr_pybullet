@@ -196,8 +196,7 @@ class HsrPybulletEnv(gym.Env):
         self.proximity_change_threshold = 0.5  # meter
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
-        self.normalized_action_space = True
-        self.normalized_observation_space = True
+        self.normalized_action_and_observation_spaces = True
 
         self.connection_mode = p.GUI if gui else p.DIRECT
         print(f"{Color.Green.value}GUI mode is %s{Color.Color_Off.value}" % ("enabled" if gui else "disabled"))
@@ -273,7 +272,7 @@ class HsrPybulletEnv(gym.Env):
         info = {}
 
         # before applying action, scale it back up if action space is normalized
-        if self.normalized_action_space:
+        if self.normalized_action_and_observation_spaces:
             if verbose:
                 print("Scaling normalized joint value from [-1, 1] to joint limits:")
             for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
@@ -288,7 +287,7 @@ class HsrPybulletEnv(gym.Env):
 
         if not self.observation_space.contains(obs):
             print(f"{Color.Yellow.value}WARNING: observation does not fall within observation space{Color.Color_Off.value}")
-            print("\tApplied action is %s" % "normalized" if self.normalized_action_space else "not normalized")
+            print("\tApplied action is %s" % "normalized" if self.normalized_action_and_observation_spaces else "not normalized")
             print(f"\tAction: {action}")
             print("\tLimit check:")
             for i in range(self.observation_space_length):
@@ -371,7 +370,7 @@ class HsrPybulletEnv(gym.Env):
         obs["object_pose"] = {"position_xyz": obj_position_xyz, "quaternion_xyzw": obj_quaternion_xyzw}
 
         # if observation space is normalized, joint values have to normalized to [-1, 1]
-        if self.normalized_observation_space:
+        if self.normalized_action_and_observation_spaces:
             if verbose:
                 print("Normalizing joint values to range [-1, 1]:")
             for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
@@ -440,7 +439,7 @@ class HsrPybulletEnv(gym.Env):
 
         If normalized_action_space is True, joint values are normalized to [-1, 1]
         """
-        if self.normalized_action_space:
+        if self.normalized_action_and_observation_spaces:
             action_space = spaces.Box(
                 np.ones(self.num_dofs, dtype=np.float32) * -1.0,
                 np.ones(self.num_dofs, dtype=np.float32)
@@ -464,13 +463,13 @@ class HsrPybulletEnv(gym.Env):
         - 3 object position XYZ
         - 4 object orientation (quaternion XYZW)
 
-        If normalized_observation_space is True, joint values are normalized to [-1, 1] (rest are not normalized) 
+        If normalized_action_and_observation_spaces is True, joint values are normalized to [-1, 1] (rest are not normalized) 
         """
         lower = []
         upper = []
 
         # joint values (normalized between [-1.0, 1.0])
-        if self.normalized_observation_space:
+        if self.normalized_action_and_observation_spaces:
             lower.extend(np.ones(self.num_dofs, dtype=np.float32) * -1.0)
             upper.extend(np.ones(self.num_dofs, dtype=np.float32))
         else:
@@ -683,6 +682,15 @@ class HsrPybulletEnv(gym.Env):
             base_position=base_position,
             flags=self.bullet_client.URDF_USE_SELF_COLLISION
             )
+
+        # color links
+        self.bullet_client.changeVisualShape(
+            robot_body_unique_id.id,
+            3, # base_link
+            rgbaColor=(0.6, 0.4, 0, 1.0),
+            physicsClientId=self.bullet_client._client
+        )
+
         return robot_body_unique_id
     
     def remove_robot(self):
