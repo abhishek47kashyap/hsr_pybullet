@@ -24,11 +24,14 @@ import threading
 
 import trimesh
 
-from stable_baselines3.common.env_checker import check_env
 import pybullet as p
 import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
+
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.env_checker import check_env
 
 np.set_printoptions(suppress=True)
 
@@ -206,7 +209,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.error_tolerance = 1.0
         self.is_base_moving_threshold = 1.0
-        self.max_time_to_reach_goal = 20  # seconds allowed to reach goal
+        self.max_time_to_reach_goal = 3  # seconds allowed to reach goal
 
         self.camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
         self.camera_config = deepcopy(CAMERA_REALSENSE_CONFIG if hand else CAMERA_XTION_CONFIG)
@@ -245,6 +248,12 @@ class HsrPybulletEnv(gym.Env):
         self.camera_thread = threading.Thread(target=self.spin)
         self.camera_thread.start()
 
+        # collision checking while _executing_ an action
+        self.collision_monitor_active = False
+        self.collision_detected = False   # this being true doesn't mean anything if self.collision_monitor_active is False
+
+        self.episode_num = 0
+
     def close(self):
         self.camera_thread.join()
         self.px_client.release()
@@ -253,8 +262,8 @@ class HsrPybulletEnv(gym.Env):
         random_probability = random.uniform(0, 1)
 
         # robot xy location is limited to (±10, ±10)
-        min_xy = 2.0 if random_probability > 0.5 else -2.0
-        max_xy = 7.0 if random_probability > 0.5 else -7.0
+        min_xy = 3.0 if random_probability > 0.5 else -3.0
+        max_xy = 8.0 if random_probability > 0.5 else -8.0
 
         # NOTE: if min_xy or max_xy changes, also update construct_observation_space()
 
@@ -280,7 +289,14 @@ class HsrPybulletEnv(gym.Env):
                 action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))
                 if verbose:
                     print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
+        
+        self.collision_monitoring_activation(activate=True)
         self.set_joint_position(action, verbose=verbose)
+        collision_detected = deepcopy(self.collision_detected)
+        self.collision_monitoring_activation(activate=False)
+
+        episode_termination_criteria_met = self.episode_termination_criteria_met()
+        self.done = episode_termination_criteria_met or collision_detected
 
         obs = self.get_observation(verbose=verbose, numpify=True)
         reward = self.calculate_reward()
@@ -292,17 +308,21 @@ class HsrPybulletEnv(gym.Env):
             print("\tLimit check:")
             for i in range(self.observation_space_length):
                 color = Color.Color_Off.value if self.observation_space.low[i] <= obs[i] <= self.observation_space.high[i] else Color.Red.value
-                print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]}, upper limit {self.observation_space.high[i]}{Color.Color_Off.value}")
+                print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]:.4f}, upper limit {self.observation_space.high[i]:.4f}{Color.Color_Off.value}")
 
-        self.done = self.terminate_episode()
+        if self.done:
+            print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {reward}{Color.Color_Off.value}")
+        else:
+            print(f"\t reward: {reward}")
         
         return obs, reward, self.done, info
 
-    def terminate_episode(self) -> bool:
+    def episode_termination_criteria_met(self) -> bool:
         """
         Episode termination criteria;
             - episode duration has exceeded max episode duration
             - robot went outside square area of ±10m
+            - object went outside square area of ±10m
             - robot is moving away from target without grabbing object
             - robot link that that does not have "hand" or "wrist" in its name has collided with object (will likely send the object flying away)
         """
@@ -319,24 +339,48 @@ class HsrPybulletEnv(gym.Env):
             print(f"{Color.Red.value}terminate_episode(): robot went outside square of ±10m{Color.Color_Off.value}")
             return True
         
+        # object went outside square area of ±10m
+        current_obj_position, _ = self.get_object_pose()
+        object_within_10m_sq = (-10.0 < current_obj_position[0] < 10.0) and (-10.0 < current_obj_position[1] < 10.0)
+        if not object_within_10m_sq:
+            print(f"{Color.Red.value}terminate_episode(): object went outside square of ±10m{Color.Color_Off.value}")
+            return True
+        
         # robot is moving away from target without grabbing object
-        # current_proximity_to_object = self.calculate_base_proximity_to_object()
+        current_proximity_to_object = self.calculate_base_proximity_to_object()
         # if not self.object_grasped():
-        #     if current_proximity_to_object - self.previous_proximity_to_object > self.proximity_change_threshold:
-        #         print(f"""{Color.Red.value}terminate_episode(): proximity is not decreasing, 
-        #         currently {current_proximity_to_object}m from object, 
-        #         previously {self.previous_proximity_to_object}m from object, 
-        #         threshold {self.proximity_change_threshold}m{Color.Color_Off.value}""")
-        #         return True
-        # self.previous_proximity_to_object = deepcopy(current_proximity_to_object)
+        if current_proximity_to_object - self.previous_proximity_to_object > self.proximity_change_threshold:
+            print(f"""{Color.Red.value}terminate_episode(): proximity is not decreasing, currently {current_proximity_to_object:.5f}m from object, previously {self.previous_proximity_to_object:.5f}m from object, threshold {self.proximity_change_threshold}m{Color.Color_Off.value}""")
+            return True
+        self.previous_proximity_to_object = deepcopy(current_proximity_to_object)
 
         # robot link that is not a "hand" or "wrist" link has collided with object
-        if self.collided_with_object(exclude_hand_and_wrist=True):
-            print(f"{Color.Red.value}terminate_episode(): collision with object{Color.Color_Off.value}")
+        # if self.collided_with_object(exclude_hand_and_wrist=False, verbose=False):
+        #     print(f"{Color.Red.value}terminate_episode(): collision with object{Color.Color_Off.value}")
+        #     return True
+        
+        # close enough
+        if self.calculate_base_proximity_to_object() <= 0.5:
+            print(f"{Color.Red.value}terminate_episode(): robot within 0.5m of object{Color.Color_Off.value}")
             return True
 
         return False
 
+    def collision_monitoring_activation(self, activate: bool):
+        """
+        Activates-deactivates collision monitoring.
+
+        Useful when robot is commanded to a goal joint configuration, and there is no collision AT the goal,
+        but there was a collision along the way.
+
+        Before de-activating, make sure to deepcopy() the boolean member variable self.collision_detected into a
+        local variable, because de-activation sets self.collision_detected to False. De-activating without deepcopying
+        means information of collision-occurence will be lost.
+        """
+        assert isinstance(activate, bool), 'collision_monitoring_activation() argument MUST BE A BOOLEAN'
+        self.collision_monitor_active = activate
+        self.collision_detected = False
+    
     def moving_closer_to_object(self) -> bool:
         """
         Check if robot is moving closer to object while object has not yet been picked up.
@@ -353,7 +397,8 @@ class HsrPybulletEnv(gym.Env):
         return current_proximity_to_object - previous_proximity_to_object <= self.proximity_change_threshold
 
     def start_episode(self):
-        print(f"{Color.Blue.value}Starting episode..{Color.Color_Off.value}")
+        self.episode_num += 1
+        print(f"{Color.Blue.value}Starting episode {self.episode_num}..{Color.Color_Off.value}")
         self.episode_start_time = time.time()
     
     def get_observation(self, verbose=False, numpify=True):
@@ -536,9 +581,9 @@ class HsrPybulletEnv(gym.Env):
         reward = 0.0
         
         if self.moving_closer_to_object():
-            reward += reward_values["object_not_grasped"]["getting_closer_to_object"]
+            reward += 5
         else:
-            reward -= reward_values["object_not_grasped"]["getting_closer_to_object"]
+            reward += -10
 
         return reward
 
@@ -649,7 +694,7 @@ class HsrPybulletEnv(gym.Env):
                     print(f"\t\t{all_joint_names[i]}: {current_joint_values[i]:.4f} (target: {q[i]:.4f}, error: {q[i] - current_joint_values[i]:.4f})")
 
             time.sleep(0.01)
-            # self.bullet_client.stepSimulation()   # already running in a parallel thread that's executing self.spin()
+            self.bullet_client.stepSimulation()   # already running in a parallel thread that's executing self.spin()
             error = self.get_error(q, self.get_joint_values())
             base_velocity = self.get_base_velocity()
 
@@ -670,7 +715,9 @@ class HsrPybulletEnv(gym.Env):
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
 
         self.done = False
-        self.previous_proximity_to_object = float('inf')
+        self.previous_proximity_to_object = self.calculate_base_proximity_to_object(verbose=verbose)
+
+        self.start_episode()
 
         return self.get_observation(verbose=verbose, numpify=True)
 
@@ -734,6 +781,10 @@ class HsrPybulletEnv(gym.Env):
                         continue
 
                     collided = True
+
+                    if self.collision_monitor_active:
+                        self.collision_detected = True
+
                     if verbose:
                         if (robot_link_name in collisions.keys() and contactDistance > collisions[robot_link_name]) or (robot_link_name not in collisions.keys()):
                             collisions[robot_link_name] = deepcopy(contactDistance)
@@ -791,6 +842,7 @@ class HsrPybulletEnv(gym.Env):
             except Exception as e:
                 print(f"{Color.Yellow.value}Failed to acquire camera image: {e}{Color.Color_Off.value}")
             self.bullet_client.stepSimulation()
+            self.collided_with_object(exclude_hand_and_wrist=False, verbose=False)
             time.sleep(0.001)
 
     def print_joint_values(self, q, title=None, tab_indent=0):
@@ -1073,6 +1125,21 @@ class HsrPybulletEnv(gym.Env):
         https://github.com/bulletphysics/bullet3/issues/1389
         """
         self.bullet_client.removeBody(object_id)
+    
+    def debug_method_collide_with_object(self):
+        object_position_xyz, _ = self.get_object_pose()
+        print("Object pose: ", object_position_xyz)
+        q = self.get_joint_values()
+
+        if self.normalized_action_and_observation_spaces:
+            q[0] = np.interp(object_position_xyz[0], (self.joint_limits_lower[0], self.joint_limits_upper[0]), (-1.0, 1.0))
+            q[1] = np.interp(object_position_xyz[1], (self.joint_limits_lower[1], self.joint_limits_upper[1]), (-1.0, 1.0))
+        else:
+            q[0] = object_position_xyz[0]
+            q[1] = object_position_xyz[1]
+        print("q: ", q)
+
+        self.step(action=q, verbose=False)
 
 
 if __name__ == "__main__":
@@ -1093,3 +1160,23 @@ if __name__ == "__main__":
     #     if done:
     #         obs = env.reset()
     #         env.start_episode()
+
+    # RL
+    saved_model_name = "ppo_approaching_object"
+    model = PPO('MlpPolicy', env, verbose=1)
+    print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
+    model.learn(total_timesteps=25000)
+    model.save(saved_model_name)
+    print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
+
+    del model
+
+    model = PPO.load(saved_model_name)
+
+    obs = env.reset()
+    for i in range(1000):
+        action, _state = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        env.render()
+        if done:
+            obs = env.reset()
