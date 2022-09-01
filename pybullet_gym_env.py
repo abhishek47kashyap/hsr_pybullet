@@ -32,6 +32,8 @@ import pybulletX as px
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.env_checker import check_env
+from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.callbacks import BaseCallback
 
 np.set_printoptions(suppress=True)
 
@@ -253,6 +255,7 @@ class HsrPybulletEnv(gym.Env):
         self.collision_detected = False   # this being true doesn't mean anything if self.collision_monitor_active is False
 
         self.episode_num = 0
+        self.episode_reward = 0
 
     def close(self):
         self.camera_thread.join()
@@ -300,6 +303,7 @@ class HsrPybulletEnv(gym.Env):
 
         obs = self.get_observation(verbose=verbose, numpify=True)
         reward = self.calculate_reward()
+        self.episode_reward += reward
 
         if not self.observation_space.contains(obs):
             print(f"{Color.Yellow.value}WARNING: observation does not fall within observation space{Color.Color_Off.value}")
@@ -311,9 +315,9 @@ class HsrPybulletEnv(gym.Env):
                 print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]:.4f}, upper limit {self.observation_space.high[i]:.4f}{Color.Color_Off.value}")
 
         if self.done:
-            print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {reward}{Color.Color_Off.value}")
+            print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value}")
         else:
-            print(f"\t reward: {reward}")
+            print(f"\treward: {reward}")
         
         return obs, reward, self.done, info
 
@@ -330,7 +334,7 @@ class HsrPybulletEnv(gym.Env):
         # episode duration has exceeded max episode duration
         if self.episode_start_time:
             if (time.time() - self.episode_start_time) >= self.episode_max_duration:
-                print(f"{Color.Red.value}terminate_episode(): max episode duration {self.episode_max_duration}s exceeded{Color.Color_Off.value}")
+                print(f"\t{Color.Red.value}terminate_episode(): max episode duration {self.episode_max_duration}s exceeded{Color.Color_Off.value}")
                 return True
         
         # robot went outside square area of ±10m
@@ -343,25 +347,25 @@ class HsrPybulletEnv(gym.Env):
         current_obj_position, _ = self.get_object_pose()
         object_within_10m_sq = (-10.0 < current_obj_position[0] < 10.0) and (-10.0 < current_obj_position[1] < 10.0)
         if not object_within_10m_sq:
-            print(f"{Color.Red.value}terminate_episode(): object went outside square of ±10m{Color.Color_Off.value}")
+            print(f"\t{Color.Red.value}terminate_episode(): object went outside square of ±10m{Color.Color_Off.value}")
             return True
         
         # robot is moving away from target without grabbing object
         current_proximity_to_object = self.calculate_base_proximity_to_object()
         # if not self.object_grasped():
         if current_proximity_to_object - self.previous_proximity_to_object > self.proximity_change_threshold:
-            print(f"""{Color.Red.value}terminate_episode(): proximity is not decreasing, currently {current_proximity_to_object:.5f}m from object, previously {self.previous_proximity_to_object:.5f}m from object, threshold {self.proximity_change_threshold}m{Color.Color_Off.value}""")
+            print(f"\t{Color.Red.value}terminate_episode(): proximity is not decreasing, currently {current_proximity_to_object:.5f}m from object, previously {self.previous_proximity_to_object:.5f}m from object, threshold {self.proximity_change_threshold}m{Color.Color_Off.value}")
             return True
         self.previous_proximity_to_object = deepcopy(current_proximity_to_object)
 
         # robot link that is not a "hand" or "wrist" link has collided with object
         # if self.collided_with_object(exclude_hand_and_wrist=False, verbose=False):
-        #     print(f"{Color.Red.value}terminate_episode(): collision with object{Color.Color_Off.value}")
+        #     print(f"\t{Color.Red.value}terminate_episode(): collision with object{Color.Color_Off.value}")
         #     return True
         
         # close enough
         if self.calculate_base_proximity_to_object() <= 0.5:
-            print(f"{Color.Red.value}terminate_episode(): robot within 0.5m of object{Color.Color_Off.value}")
+            print(f"\t{Color.Red.value}terminate_episode(): robot within 0.5m of object{Color.Color_Off.value}")
             return True
 
         return False
@@ -398,6 +402,7 @@ class HsrPybulletEnv(gym.Env):
 
     def start_episode(self):
         self.episode_num += 1
+        self.episode_reward = 0
         print(f"{Color.Blue.value}Starting episode {self.episode_num}..{Color.Color_Off.value}")
         self.episode_start_time = time.time()
     
@@ -706,11 +711,7 @@ class HsrPybulletEnv(gym.Env):
         if verbose:
             print("================== RESET ========================")
 
-        # Resetting does not put it back at origin; the robot does get reset at the origin
-        # but for some reason shoots to the position it was at before reset was called.
-        # To "hold down" the robot at origin, a dirty hack is to remove the robot altogether and re-spawn.
-        self.remove_robot()
-        self.robot_body_unique_id = self.spawn_robot()
+        self.robot_body_unique_id.reset()
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
 
@@ -841,7 +842,7 @@ class HsrPybulletEnv(gym.Env):
                 width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             except Exception as e:
                 print(f"{Color.Yellow.value}Failed to acquire camera image: {e}{Color.Color_Off.value}")
-            self.bullet_client.stepSimulation()
+            # self.bullet_client.stepSimulation()  # interferes with reset()
             self.collided_with_object(exclude_hand_and_wrist=False, verbose=False)
             time.sleep(0.001)
 
@@ -1164,10 +1165,17 @@ if __name__ == "__main__":
     # RL
     saved_model_name = "ppo_approaching_object"
     model = PPO('MlpPolicy', env, verbose=1)
+
+    # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
+    # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
+
     print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
-    model.learn(total_timesteps=25000)
+    model.learn(total_timesteps=1)
     model.save(saved_model_name)
     print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
+
+    # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
+    # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
     del model
 
