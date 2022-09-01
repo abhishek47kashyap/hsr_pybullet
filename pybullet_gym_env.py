@@ -153,7 +153,7 @@ def file_exists(filepath: str) -> bool:
 
 
 class Color(Enum):
-    Red = "\033[0;31m"   
+    Red = "\033[0;31m"
     Green = "\033[0;32m"
     Yellow = "\033[0;33m"
     Blue = "\033[0;34m"
@@ -215,7 +215,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
         self.camera_config = deepcopy(CAMERA_REALSENSE_CONFIG if hand else CAMERA_XTION_CONFIG)
-        
+
         self.end_effector_joint_frame = 'hand_palm_joint'
         self.end_effector_link_idx = 35  # hand_palm_joint, hand_palm_link
 
@@ -292,7 +292,7 @@ class HsrPybulletEnv(gym.Env):
                 action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))
                 if verbose:
                     print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
-        
+
         self.collision_monitoring_activation(activate=True)
         self.set_joint_position(action, verbose=verbose)
         collision_detected = deepcopy(self.collision_detected)
@@ -318,7 +318,7 @@ class HsrPybulletEnv(gym.Env):
             print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value}")
         else:
             print(f"\treward: {reward}")
-        
+
         return obs, reward, self.done, info
 
     def episode_termination_criteria_met(self) -> bool:
@@ -330,26 +330,26 @@ class HsrPybulletEnv(gym.Env):
             - robot is moving away from target without grabbing object
             - robot link that that does not have "hand" or "wrist" in its name has collided with object (will likely send the object flying away)
         """
-        
+
         # episode duration has exceeded max episode duration
         if self.episode_start_time:
             if (time.time() - self.episode_start_time) >= self.episode_max_duration:
                 print(f"\t{Color.Red.value}terminate_episode(): max episode duration {self.episode_max_duration}s exceeded{Color.Color_Off.value}")
                 return True
-        
+
         # robot went outside square area of ±10m
         current_base_position_xy = self.get_base_position_xy()  # [x, y]
         if (current_base_position_xy[0] > self.joint_limits_upper[0]) or (current_base_position_xy[1] > self.joint_limits_upper[1]):
             print(f"{Color.Red.value}terminate_episode(): robot went outside square of ±10m{Color.Color_Off.value}")
             return True
-        
+
         # object went outside square area of ±10m
         current_obj_position, _ = self.get_object_pose()
         object_within_10m_sq = (-10.0 < current_obj_position[0] < 10.0) and (-10.0 < current_obj_position[1] < 10.0)
         if not object_within_10m_sq:
             print(f"\t{Color.Red.value}terminate_episode(): object went outside square of ±10m{Color.Color_Off.value}")
             return True
-        
+
         # robot is moving away from target without grabbing object
         current_proximity_to_object = self.calculate_base_proximity_to_object()
         # if not self.object_grasped():
@@ -362,7 +362,7 @@ class HsrPybulletEnv(gym.Env):
         # if self.collided_with_object(exclude_hand_and_wrist=False, verbose=False):
         #     print(f"\t{Color.Red.value}terminate_episode(): collision with object{Color.Color_Off.value}")
         #     return True
-        
+
         # close enough
         if self.calculate_base_proximity_to_object() <= 0.5:
             print(f"\t{Color.Red.value}terminate_episode(): robot within 0.5m of object{Color.Color_Off.value}")
@@ -384,7 +384,7 @@ class HsrPybulletEnv(gym.Env):
         assert isinstance(activate, bool), 'collision_monitoring_activation() argument MUST BE A BOOLEAN'
         self.collision_monitor_active = activate
         self.collision_detected = False
-    
+
     def moving_closer_to_object(self) -> bool:
         """
         Check if robot is moving closer to object while object has not yet been picked up.
@@ -405,7 +405,7 @@ class HsrPybulletEnv(gym.Env):
         self.episode_reward = 0
         print(f"{Color.Blue.value}Starting episode {self.episode_num}..{Color.Color_Off.value}")
         self.episode_start_time = time.time()
-    
+
     def get_observation(self, verbose=False, numpify=True):
         """
         Returns information about environment as a dict based on observation template
@@ -513,7 +513,7 @@ class HsrPybulletEnv(gym.Env):
         - 3 object position XYZ
         - 4 object orientation (quaternion XYZW)
 
-        If normalized_action_and_observation_spaces is True, joint values are normalized to [-1, 1] (rest are not normalized) 
+        If normalized_action_and_observation_spaces is True, joint values are normalized to [-1, 1] (rest are not normalized)
         """
         lower = []
         upper = []
@@ -584,7 +584,7 @@ class HsrPybulletEnv(gym.Env):
         }
 
         reward = 0.0
-        
+
         if self.moving_closer_to_object():
             reward += 5
         else:
@@ -619,7 +619,7 @@ class HsrPybulletEnv(gym.Env):
 
     def sample_action_space(self):
         return self.action_space.sample()
-    
+
     def set_joint_position(self, q, verbose=False):
         if len(q) != self.num_dofs:
             raise ValueError(f"set_joint_positions(): q has {len(q)} values but robot has {self.num_dofs} DOF")
@@ -629,7 +629,7 @@ class HsrPybulletEnv(gym.Env):
         line_to_xyz = [q[0], q[1], 0.0]
 
         line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=10.0)
-        
+
         self.bullet_client.setJointMotorControlArray(
             bodyUniqueId=self.robot_body_unique_id.id,
             jointIndices=self.free_joint_indices,
@@ -682,13 +682,13 @@ class HsrPybulletEnv(gym.Env):
                 if verbose:
                     print(f"{Color.Yellow.value}TIMED OUT on its way to goal{Color.Color_Off.value}, L2 norm of error across all joints: {error:.4f}, base_velocity: {base_velocity:.4f}")
                 break
-            
+
             if error < self.error_tolerance and robot_has_started_moving and base_velocity <= 0.001:
                 if verbose:
                     print(f"{Color.Green.value}REACHED GOAL in {time.time() - start_time:.4f} seconds{Color.Color_Off.value}, all joints error: {error:.4f}, base error: {self.get_base_error(q, self.get_joint_values()):.4f}, base velocity: {base_velocity:.4f}, max base velocity: {max_base_velocity:.4f} (components: {max_base_velocity_xy})")
                     self.print_joint_values(self.get_joint_values(), title="Joint values at goal:", tab_indent=2)
                 break
-            
+
             if verbose and time.time() - base_log_start > base_log_freq:
                 base_log_start = time.time()
                 print("Currently:")
@@ -740,10 +740,10 @@ class HsrPybulletEnv(gym.Env):
         )
 
         return robot_body_unique_id
-    
+
     def remove_robot(self):
         self.bullet_client.removeBody(self.robot_body_unique_id.id)
-    
+
     def collided_with_object(self, exclude_hand_and_wrist: bool, verbose=False) -> bool:
         """
         Contacts are NOT computed in real-time when this method is called.
@@ -832,10 +832,10 @@ class HsrPybulletEnv(gym.Env):
             return np.linalg.norm(q1[:-4] - q2[:-4])   # order of q is the same as all_joint_names
         else:
             return np.linalg.norm(q1 - q2)   # order of q is the same as all_joint_names
-    
+
     def get_base_error(self, q1, q2):
         return np.linalg.norm(q1[:3] - q2[:3])   # order of q is the same as all_joint_names
-    
+
     def spin(self):
         while True:
             try:
@@ -849,26 +849,26 @@ class HsrPybulletEnv(gym.Env):
     def print_joint_values(self, q, title=None, tab_indent=0):
         if len(q) != self.num_dofs:
             raise ValueError(f"print_joint_values(): q has {len(q)} values but robot has {self.num_dofs} DOF")
-        
+
         if title is None:
             title = "All joint values:"
 
         tab_indent_str = ""
         for _ in range(tab_indent):
-            tab_indent_str += "\t"        
-        
+            tab_indent_str += "\t"
+
         title = tab_indent_str + title
         print(title)
         tab_indent_str += "\t"
         for name, value in zip(all_joint_names, q):
             print(f"{tab_indent_str}{name}: {value:.4f}")
-    
+
     def print_pose(self, position_xyz, quaternion_xyzw, title=None, tab_indent=0):
         if len(position_xyz) != 3:
             raise ValueError(f"print_pose(): position_xyz has {len(position_xyz)} elements but should have 3 elements")
         if len(quaternion_xyzw) != 4:
             raise ValueError(f"print_pose(): quaternion_xyzw has {len(quaternion_xyzw)} elements but should have 4 elements")
-        
+
         if title is None:
             title = "Position and orientation:"
 
@@ -885,11 +885,11 @@ class HsrPybulletEnv(gym.Env):
         print(f"{tab_indent_str}Quaternion (xyzw):")
         for coor in quaternion_xyzw:
             print(f"{tab_indent_str}\t{coor:.4f}")
-    
+
     def get_joint_frame_pose(self, joint_frame: str):
         link_state = self.robot_body_unique_id.get_link_state_by_name(joint_frame)
         return link_state.world_link_frame_position, link_state.world_link_frame_orientation
-    
+
     def get_camera_image(self):
         camera_link_position, camera_link_orientation = self.get_joint_frame_pose(self.camera_joint_frame)
 
@@ -953,17 +953,17 @@ class HsrPybulletEnv(gym.Env):
             self.print_joint_values(joint_values, title="All joint values:")
 
         return joint_values
-    
+
     def get_joint_velocities(self, verbose=False):
         return list(self.robot_body_unique_id.get_states().joint_velocity)
-    
+
     def get_joint_max_velocities_and_forces(self, verbose=False):
         joint_infos = self.robot_body_unique_id.get_joint_infos()
         return joint_infos["joint_max_velocity"], joint_infos["joint_max_force"]
-    
+
     def get_base_position_xy(self):
         return self.get_joint_values()[:2]   # first two elements are x and y
-    
+
     def get_base_velocity(self, xy_components=False):
         """
         Returns X and Y components of base velocity if xy_components is true, else L2-norm of X and Y components
@@ -992,22 +992,22 @@ class HsrPybulletEnv(gym.Env):
             self.print_joint_values(q, title="IK solution:", tab_indent=1)
 
         return list(q)
-        
+
     def calculate_forward_kinematics(self, q, verbose=False):
         """
         Ref: https://github.com/bulletphysics/bullet3/issues/2603
                 "create a second DIRECT pybullet connection, load the arm there, reset it to the angles,
                 and run the forward kinematics in that second 'dummy' robot."
-        
+
         For creating a second connection, refer to https://github.com/bulletphysics/bullet3/issues/1925#issuecomment-428355937
         """
 
         if len(q) != self.num_dofs:
             raise ValueError(f"calculate_forward_kinematics(): q has {len(q)} values but robot has {self.num_dofs} DOF")
-        
+
         if verbose:
             self.print_joint_values(q, title="Calculating FK for:")
-        
+
         throwaway_client = bc.BulletClient(connection_mode=p.DIRECT)
 
         throwaway_client.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -1034,14 +1034,14 @@ class HsrPybulletEnv(gym.Env):
             linkIndex=self.end_effector_link_idx,
             computeForwardKinematics=1
             )
-        
+
         throwaway_client.disconnect()
-        
+
         if verbose:
             self.print_pose(gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation, title="FK results:")
 
         return gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation
-    
+
     def gripper_open(self):
         q = self.get_joint_values()
 
@@ -1068,7 +1068,7 @@ class HsrPybulletEnv(gym.Env):
             physicsClientId=self.bullet_client._client
             )
         return position_xyz, quaternion_xyzw
-    
+
     def add_object_to_scene(self, model_name: str, base_position: tuple, verbose=False):
         mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
         collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
@@ -1126,7 +1126,7 @@ class HsrPybulletEnv(gym.Env):
         https://github.com/bulletphysics/bullet3/issues/1389
         """
         self.bullet_client.removeBody(object_id)
-    
+
     def debug_method_collide_with_object(self):
         object_position_xyz, _ = self.get_object_pose()
         print("Object pose: ", object_position_xyz)
