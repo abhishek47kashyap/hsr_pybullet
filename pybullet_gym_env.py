@@ -638,31 +638,6 @@ class HsrPybulletEnv(gym.Env):
             targetVelocities=np.zeros_like(q)
         )
 
-        # sluggish (code from Yuki's version)
-        # current_joint_values = self.get_joint_values()
-        # time_for_base = np.max([abs(q[i] - current_joint_values[i]) / self.joint_max_velocities[i] for i in [0, 1, 2]])
-        # max_velocities = deepcopy(self.joint_max_velocities)
-        # for i in range(3):   # first 3 joints that correspond to base XY position and yaw orientation
-        #     max_velocities[i] = abs(q[i] - current_joint_values[i]) / time_for_base
-        # for i in range(len(all_joint_names)):
-        #     target_velocity = max_velocities[i] if (time_for_base >  0 and i <= 2) else 0.0
-        #     self.bullet_client.setJointMotorControl2(
-        #         bodyUniqueId=self.robot_body_unique_id.id,
-        #         jointIndex=self.free_joint_indices[i],
-        #         controlMode=p.POSITION_CONTROL,
-        #         targetPosition=q[i],
-        #         targetVelocity=target_velocity,
-        #         force=self.joint_max_forces[i],
-        #         maxVelocity=max_velocities[i]
-        #     )
-
-        # pybulletX's robot.set_joint_position() causes base to overshoot, not sure why
-        # self.robot_body_unique_id.set_joint_position(
-        #     q,
-        #     max_forces=self.joint_max_forces,
-        #     use_joint_effort_limits=True
-        # )
-
         start_time = time.time()
         error = self.get_error(q, self.get_joint_values())
         base_velocity = self.get_base_velocity(xy_components=False)
