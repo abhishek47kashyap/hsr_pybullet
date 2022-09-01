@@ -21,6 +21,7 @@ import random
 import os
 import sys
 import threading
+import atexit
 
 import trimesh
 
@@ -1139,6 +1140,12 @@ if __name__ == "__main__":
     # RL
     saved_model_name = "ppo_approaching_object"
     model = PPO('MlpPolicy', env, verbose=1)
+
+    def on_exit():
+        model.save(saved_model_name)
+        print(f"{Color.Cyan.value}Keyboard interrupt, model saved as name {saved_model_name}{Color.Color_Off.value}")
+
+    atexit.register(on_exit)
 
     # print(f"------------> Before training...")
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
