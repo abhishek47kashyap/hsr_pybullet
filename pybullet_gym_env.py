@@ -29,7 +29,7 @@ import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
 
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, A2C
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
@@ -314,10 +314,9 @@ class HsrPybulletEnv(gym.Env):
                 color = Color.Color_Off.value if self.observation_space.low[i] <= obs[i] <= self.observation_space.high[i] else Color.Red.value
                 print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]:.4f}, upper limit {self.observation_space.high[i]:.4f}{Color.Color_Off.value}")
 
+        print(f"\treward: {reward}")
         if self.done:
             print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value}")
-        else:
-            print(f"\treward: {reward}")
 
         return obs, reward, self.done, info
 
@@ -1141,11 +1140,12 @@ if __name__ == "__main__":
     saved_model_name = "ppo_approaching_object"
     model = PPO('MlpPolicy', env, verbose=1)
 
+    # print(f"------------> Before training...")
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
     print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
-    model.learn(total_timesteps=1)
+    model.learn(total_timesteps=10000)
     model.save(saved_model_name)
     print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
 
