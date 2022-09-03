@@ -631,7 +631,7 @@ class HsrPybulletEnv(gym.Env):
 
     def set_joint_position(self, q, verbose=False):
         if len(q) != self.num_dofs:
-            raise ValueError(f"set_joint_positions(): q has {len(q)} values but robot has {self.num_dofs} DOF")
+            raise ValueError(f"set_joint_position(): q has {len(q)} values but robot has {self.num_dofs} DOF")
 
         current_base_position_xy = self.get_base_position_xy()
         line_from_xyz = [current_base_position_xy[0], current_base_position_xy[1], 0.0]
@@ -956,6 +956,11 @@ class HsrPybulletEnv(gym.Env):
         return base_vel if xy_components else np.linalg.norm(base_vel)
 
     def calculate_inverse_kinematics(self, position_xyz: tuple, quaternion_xyzw: tuple, verbose=False):
+        """
+        Calculates inverse kinematics given end-effector position (xyz) and orientation (quaternion xyzw).
+
+        Returns list of joint values.
+        """
         if verbose:
             self.print_pose(position_xyz, quaternion_xyzw, title="Calculating IK for")
 
@@ -1025,6 +1030,25 @@ class HsrPybulletEnv(gym.Env):
             self.print_pose(gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation, title="FK results:")
 
         return gripper_state.world_link_frame_position, gripper_state.world_link_frame_orientation
+
+    def get_end_effector_pose(self, verbose=False):
+        """
+        Returns end-effector position (list of 3 floats, xyz) and orientation (list of 4 floats, quaternion xyzw)
+        """
+        ee_pose = self.bullet_client.getLinkState(
+            bodyUniqueId=self.robot_body_unique_id.id,
+            linkIndex=self.end_effector_link_idx,
+            computeForwardKinematics=1,
+            physicsClientId=self.bullet_client._client
+        )
+
+        ee_position = ee_pose.world_link_frame_position
+        ee_quaternion_xyzw = ee_pose.world_link_frame_orientation
+
+        if verbose:
+            self.print_pose(ee_position, ee_quaternion_xyzw, title="End effector pose:")
+
+        return ee_position, ee_quaternion_xyzw
 
     def gripper_open(self):
         q = self.get_joint_values()
