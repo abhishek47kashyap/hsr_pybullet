@@ -231,6 +231,9 @@ class HsrPybulletEnv(gym.Env):
 
         self.renderer = self.bullet_client.ER_BULLET_HARDWARE_OPENGL   # or pybullet_client.ER_TINY_RENDERER
 
+        if gui:
+            self.bullet_client.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=10, cameraPitch=-40, cameraTargetPosition=[0.55,-0.35,0.2])
+
         self.robot_body_unique_id = self.spawn_robot()
         print()
         self.robot_body_unique_id.torque_control = torque_control
