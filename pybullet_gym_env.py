@@ -265,6 +265,10 @@ class HsrPybulletEnv(gym.Env):
         self.episode_num = 0
         self.episode_reward = 0
 
+        print("Moving to object")
+        ik_solution = self.calculate_inverse_kinematics(position_xyz=self.get_object_pose()[0], verbose=True)
+        self.set_joint_position(q=ik_solution, verbose=True)
+
     def close(self):
         self.camera_thread.join()
         self.px_client.release()
@@ -716,12 +720,21 @@ class HsrPybulletEnv(gym.Env):
             )
 
         # color links
-        self.bullet_client.changeVisualShape(
-            robot_body_unique_id.id,
-            3, # base_link
-            rgbaColor=(0.6, 0.4, 0, 1.0),
-            physicsClientId=self.bullet_client._client
-        )
+        def set_link_color(link_idx, rgba: tuple):
+            self.bullet_client.changeVisualShape(
+                robot_body_unique_id.id,
+                link_idx,
+                rgbaColor=rgba,
+                physicsClientId=self.bullet_client._client
+            )
+        set_link_color(link_idx=3, rgba=(0.6, 0.4, 0, 1.0))   # base_link
+        set_link_color(link_idx=self.end_effector_link_idx, rgba=(0.0, 0.0, 0.8, 1.0))   # hand_palm_link
+        set_link_color(link_idx=37, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_l_proximal_link
+        set_link_color(link_idx=38, rgba=(0.0, 0.8, 0.0, 1.0))   # hand_l_spring_proximal_link
+        set_link_color(link_idx=40, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_l_distal_link
+        set_link_color(link_idx=43, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_r_proximal_link
+        set_link_color(link_idx=44, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_r_spring_proximal_link
+        set_link_color(link_idx=46, rgba=(0.0, 0.8, 0.0, 1.0))   # hand_r_distal_link
 
         return robot_body_unique_id
 
@@ -847,10 +860,10 @@ class HsrPybulletEnv(gym.Env):
         for name, value in zip(all_joint_names, q):
             print(f"{tab_indent_str}{name}: {value:.4f}")
 
-    def print_pose(self, position_xyz, quaternion_xyzw, title=None, tab_indent=0):
+    def print_pose(self, position_xyz, quaternion_xyzw=None, title=None, tab_indent=0):
         if len(position_xyz) != 3:
             raise ValueError(f"print_pose(): position_xyz has {len(position_xyz)} elements but should have 3 elements")
-        if len(quaternion_xyzw) != 4:
+        if quaternion_xyzw and len(quaternion_xyzw) != 4:
             raise ValueError(f"print_pose(): quaternion_xyzw has {len(quaternion_xyzw)} elements but should have 4 elements")
 
         if title is None:
@@ -867,8 +880,11 @@ class HsrPybulletEnv(gym.Env):
         for coor in position_xyz:
             print(f"{tab_indent_str}\t{coor:.4f}")
         print(f"{tab_indent_str}Quaternion (xyzw):")
-        for coor in quaternion_xyzw:
-            print(f"{tab_indent_str}\t{coor:.4f}")
+        if quaternion_xyzw:
+            for coor in quaternion_xyzw:
+                print(f"{tab_indent_str}\t{coor:.4f}")
+        else:
+            print(f"{tab_indent_str}\tundefined")
 
     def get_joint_frame_pose(self, joint_frame: str):
         link_state = self.robot_body_unique_id.get_link_state_by_name(joint_frame)
@@ -955,14 +971,36 @@ class HsrPybulletEnv(gym.Env):
         base_vel = self.get_joint_velocities()[:2]  # X and Y components
         return base_vel if xy_components else np.linalg.norm(base_vel)
 
-    def calculate_inverse_kinematics(self, position_xyz: tuple, quaternion_xyzw: tuple, verbose=False):
+    def calculate_inverse_kinematics(self, position_xyz: list, quaternion_xyzw: list = None, seed_config: list = None, verbose=False):
         """
-        Calculates inverse kinematics given end-effector position (xyz) and orientation (quaternion xyzw).
+        Calculates inverse kinematics given end-effector position (xyz).
+
+        Optional:
+            - orientation
+            - seed state
 
         Returns list of joint values.
         """
         if verbose:
             self.print_pose(position_xyz, quaternion_xyzw, title="Calculating IK for")
+
+        ik_optional_args = {
+            "lowerLimits": self.joint_limits_lower,
+            "upperLimits": self.joint_limits_upper,
+            "maxNumIterations": 1000,
+            "residualThreshold": 1e-4,
+            "physicsClientId": self.bullet_client._client
+        }
+        if quaternion_xyzw:
+            if len(quaternion_xyzw) != 4:
+                raise ValueError(f"calculate_inverse_kinematics(): quaternion_xyzw has {len(quaternion_xyzw)} elements but should have 4 elements")
+            else:
+                ik_optional_args["targetOrientation"] = quaternion_xyzw
+        if seed_config:
+            if len(seed_config) != self.num_dofs:
+                raise ValueError(f"calculate_inverse_kinematics(): seed config has {len(q)} values but robot has {self.num_dofs} DOF")
+            else:
+                ik_optional_args["restPoses"] = seed_config
 
         q = self.bullet_client.calculateInverseKinematics(
             bodyUniqueId=self.robot_body_unique_id.id,
