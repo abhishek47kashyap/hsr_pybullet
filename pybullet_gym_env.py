@@ -195,7 +195,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        gui = True
+        gui = False
         hand = True
 
         self.done = False
@@ -265,6 +265,8 @@ class HsrPybulletEnv(gym.Env):
         self.episode_num = 0
         self.episode_reward = 0
 
+        self.time_of_big_bang = None
+
     def close(self):
         self.camera_thread.join()
         self.px_client.release()
@@ -326,7 +328,8 @@ class HsrPybulletEnv(gym.Env):
         time_remaining = self.episode_max_duration - time_since_episode_start
         print(f"\treward: {reward}, time: {time_since_episode_start:.1f}s, time left: {time_remaining:.1f}s")
         if self.done:
-            print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value}")
+            time_since_big_bang = int(time.time() - self.time_of_big_bang)
+            print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value} (time since big bang: {time_since_big_bang}s)")
 
         return obs, reward, self.done, info
 
@@ -1240,6 +1243,7 @@ if __name__ == "__main__":
     # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
     print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
+    env.time_of_big_bang = time.time()
     model.learn(total_timesteps=10000)
     model.save(saved_model_name)
     print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
@@ -1247,14 +1251,14 @@ if __name__ == "__main__":
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-    del model
+    # del model
 
-    model = PPO.load(saved_model_name)
+    # model = PPO.load(saved_model_name)
 
-    obs = env.reset()
-    while True:
-        action, _state = model.predict(obs, deterministic=True)
-        obs, reward, done, info = env.step(action)
-        env.render()
-        if done:
-            obs = env.reset()
+    # obs = env.reset()
+    # while True:
+    #     action, _state = model.predict(obs, deterministic=True)
+    #     obs, reward, done, info = env.step(action)
+    #     env.render()
+    #     if done:
+    #         obs = env.reset()
