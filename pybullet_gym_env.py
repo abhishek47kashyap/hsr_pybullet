@@ -265,10 +265,6 @@ class HsrPybulletEnv(gym.Env):
         self.episode_num = 0
         self.episode_reward = 0
 
-        print("Moving to object")
-        ik_solution = self.calculate_inverse_kinematics(position_xyz=self.get_object_pose()[0], verbose=True)
-        self.set_joint_position(q=ik_solution, verbose=True)
-
     def close(self):
         self.camera_thread.join()
         self.px_client.release()
@@ -688,7 +684,7 @@ class HsrPybulletEnv(gym.Env):
 
             time.sleep(0.01)
             self.bullet_client.stepSimulation()   # already running in a parallel thread that's executing self.spin()
-            error = self.get_error(q, self.get_joint_values())
+            error = self.get_error(q, self.get_joint_values(), ignore_hand_joints=True)
             base_velocity = self.get_base_velocity()
 
         self.bullet_client.removeUserDebugItem(line_id)
@@ -731,10 +727,10 @@ class HsrPybulletEnv(gym.Env):
         set_link_color(link_idx=self.end_effector_link_idx, rgba=(0.0, 0.0, 0.8, 1.0))   # hand_palm_link
         set_link_color(link_idx=37, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_l_proximal_link
         set_link_color(link_idx=38, rgba=(0.0, 0.8, 0.0, 1.0))   # hand_l_spring_proximal_link
-        set_link_color(link_idx=40, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_l_distal_link
+        set_link_color(link_idx=40, rgba=(0.0, 0.8, 0.8, 1.0))   # hand_l_distal_link
         set_link_color(link_idx=43, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_r_proximal_link
         set_link_color(link_idx=44, rgba=(0.0, 0.5, 0.8, 1.0))   # hand_r_spring_proximal_link
-        set_link_color(link_idx=46, rgba=(0.0, 0.8, 0.0, 1.0))   # hand_r_distal_link
+        set_link_color(link_idx=46, rgba=(0.8, 0.8, 0.0, 1.0))   # hand_r_distal_link
 
         return robot_body_unique_id
 
@@ -989,6 +985,8 @@ class HsrPybulletEnv(gym.Env):
             "upperLimits": self.joint_limits_upper,
             "maxNumIterations": 1000,
             "residualThreshold": 1e-4,
+            # "solver": p.IK_DLS,
+            "solver": p.IK_SDLS,
             "physicsClientId": self.bullet_client._client
         }
         if quaternion_xyzw:
@@ -1108,11 +1106,18 @@ class HsrPybulletEnv(gym.Env):
 
         self.set_joint_position(q)
 
-    def get_object_pose(self):
+    def get_object_pose(self, verbose=False):
+        """
+        Returns position and orientation (quaternion xyzw) of object
+        """
         position_xyz, quaternion_xyzw = self.bullet_client.getBasePositionAndOrientation(
             bodyUniqueId=self.added_obj_id,
             physicsClientId=self.bullet_client._client
             )
+
+        if verbose:
+            self.print_pose(position_xyz, quaternion_xyzw, title="Object pose:")
+
         return position_xyz, quaternion_xyzw
 
     def add_object_to_scene(self, model_name: str, base_position: tuple, verbose=False):
