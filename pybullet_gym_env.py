@@ -1087,6 +1087,12 @@ class HsrPybulletEnv(gym.Env):
         return ee_position, ee_quaternion_xyzw
 
     def gripper_open(self):
+        """
+        Opens gripper. Acquires current joint configuration, and overwrites gripper joint values with
+        known values that open gripper.
+
+        (gripper keeps quivering)
+        """
         q = self.get_joint_values()
 
         q[-1] = GRIPPER_JOINT_VALUES["open"]["distal"]        # hand_r_distal_joint
@@ -1097,6 +1103,12 @@ class HsrPybulletEnv(gym.Env):
         self.set_joint_position(q)
 
     def gripper_close(self):
+        """
+        Closes gripper. Acquires current joint configuration, and overwrites gripper joint values with
+        known values that close gripper.
+
+        (gripper keeps quivering)
+        """
         q = self.get_joint_values()
 
         q[-1] = GRIPPER_JOINT_VALUES["close"]["distal"]        # hand_r_distal_joint
