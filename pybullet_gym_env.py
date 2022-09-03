@@ -199,7 +199,7 @@ class HsrPybulletEnv(gym.Env):
         self.episode_max_duration = 60   # seconds
 
         self.previous_proximity_to_object = float('inf')
-        self.proximity_change_threshold = 0.5  # meter
+        self.proximity_change_threshold = 0.25  # meter
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_and_observation_spaces = True
@@ -315,7 +315,9 @@ class HsrPybulletEnv(gym.Env):
                 color = Color.Color_Off.value if self.observation_space.low[i] <= obs[i] <= self.observation_space.high[i] else Color.Red.value
                 print(f"\t\t{color}{obs[i]:.5f}: lower limit {self.observation_space.low[i]:.4f}, upper limit {self.observation_space.high[i]:.4f}{Color.Color_Off.value}")
 
-        print(f"\treward: {reward}")
+        time_since_episode_start = time.time()-self.episode_start_time
+        time_remaining = self.episode_max_duration - time_since_episode_start
+        print(f"\treward: {reward}, time: {time_since_episode_start:.1f}s, time left: {time_remaining:.1f}s")
         if self.done:
             print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value}")
 
@@ -398,7 +400,7 @@ class HsrPybulletEnv(gym.Env):
         previous_proximity_to_object = deepcopy(self.previous_proximity_to_object)
         self.previous_proximity_to_object = deepcopy(current_proximity_to_object)
 
-        return current_proximity_to_object - previous_proximity_to_object <= self.proximity_change_threshold
+        return previous_proximity_to_object - current_proximity_to_object <= self.proximity_change_threshold
 
     def start_episode(self):
         self.episode_num += 1
@@ -1164,7 +1166,7 @@ if __name__ == "__main__":
     model = PPO.load(saved_model_name)
 
     obs = env.reset()
-    for i in range(1000):
+    while True:
         action, _state = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         env.render()
