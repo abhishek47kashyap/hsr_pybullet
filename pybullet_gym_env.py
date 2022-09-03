@@ -4,9 +4,13 @@ Ref:
 - https://towardsdatascience.com/beginners-guide-to-custom-environments-in-openai-s-gym-989371673952
 - https://medium.com/cloudcraftz/build-a-custom-environment-using-openai-gym-for-reinforcement-learning-56d7a5aa827b
 - https://github.com/openai/gym/blob/master/gym/envs/box2d/bipedal_walker.py
-- Creating OpenAI Gym Environments with PyBullet;
+- Creating OpenAI Gym Environments with PyBullet:
     - https://gerardmaggiolino.medium.com/creating-openai-gym-environments-with-pybullet-part-1-13895a622b24
     - https://gerardmaggiolino.medium.com/creating-openai-gym-environments-with-pybullet-part-2-a1441b9a4d8e
+- Creating OpenAI Gym Environments with PyBullet for Franka Emika Panda arm:
+    - Part 1: https://www.etedal.net/2020/04/pybullet-panda.html
+    - Part 2: https://www.etedal.net/2020/04/pybullet-panda_2.html
+    - Part 3: https://www.etedal.net/2020/04/pybullet-panda_3.html
 """
 
 import gym
