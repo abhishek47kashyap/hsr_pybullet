@@ -204,6 +204,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.previous_proximity_to_object = float('inf')
         self.proximity_change_threshold = 0.1  # meter
+        self.acceptable_proximity_to_object = 0.5
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_and_observation_spaces = True
@@ -312,10 +313,10 @@ class HsrPybulletEnv(gym.Env):
         episode_termination_criteria_met = self.episode_termination_criteria_met()
         self.done = episode_termination_criteria_met or collision_detected
 
-        obs = self.get_observation(verbose=verbose, numpify=True)
         reward = self.calculate_reward()
         self.episode_reward += reward
 
+        obs = self.get_observation(verbose=verbose, numpify=True)
         if not self.observation_space.contains(obs):
             print(f"{Color.Yellow.value}WARNING: observation does not fall within observation space{Color.Color_Off.value}")
             print("\tApplied action is %s" % "normalized" if self.normalized_action_and_observation_spaces else "not normalized")
@@ -343,6 +344,7 @@ class HsrPybulletEnv(gym.Env):
             - episode duration has exceeded max episode duration
             - robot went outside square area of ±10m
             - object went outside square area of ±10m
+            - robot went outside object radius
             - robot is moving away from target without grabbing object
             - robot link that that does not have "hand" or "wrist" in its name has collided with object (will likely send the object flying away)
         """
@@ -356,7 +358,7 @@ class HsrPybulletEnv(gym.Env):
         # robot went outside square area of ±10m
         current_base_position_xy = self.get_base_position_xy()  # [x, y]
         if (current_base_position_xy[0] > self.joint_limits_upper[0]) or (current_base_position_xy[1] > self.joint_limits_upper[1]):
-            print(f"{Color.Red.value}terminate_episode(): robot went outside square of ±10m{Color.Color_Off.value}")
+            print(f"\t{Color.Red.value}terminate_episode(): robot went outside square of ±10m{Color.Color_Off.value}")
             return True
 
         # object went outside square area of ±10m
@@ -364,6 +366,11 @@ class HsrPybulletEnv(gym.Env):
         object_within_10m_sq = (-10.0 < current_obj_position[0] < 10.0) and (-10.0 < current_obj_position[1] < 10.0)
         if not object_within_10m_sq:
             print(f"\t{Color.Red.value}terminate_episode(): object went outside square of ±10m{Color.Color_Off.value}")
+            return True
+
+        # robot went outside object radius
+        if self.distance_from_origin(list(current_obj_position[:2])) < self.distance_from_origin(current_base_position_xy):
+            print(f"\t{Color.Red.value}terminate_episode(): robot went outside radius of where object is{Color.Color_Off.value}")
             return True
 
         # robot is moving away from target without grabbing object
@@ -380,8 +387,8 @@ class HsrPybulletEnv(gym.Env):
         #     return True
 
         # close enough
-        if self.calculate_base_proximity_to_object() <= 0.5:
-            print(f"\t{Color.Red.value}terminate_episode(): robot within 0.5m of object{Color.Color_Off.value}")
+        if self.calculate_base_proximity_to_object() <= self.acceptable_proximity_to_object:
+            print(f"\t{Color.Red.value}terminate_episode(): robot within {self.acceptable_proximity_to_object}m of object{Color.Color_Off.value}")
             return True
 
         return False
@@ -602,12 +609,15 @@ class HsrPybulletEnv(gym.Env):
         reward = 0.0
 
         if self.moving_closer_to_object():
-            if self.calculate_base_proximity_to_object() <= 0.5:
+            if self.calculate_base_proximity_to_object() <= self.acceptable_proximity_to_object:
                 reward += 50
             else:
                 reward += 5
         else:
             reward += -10
+
+        # incentivize getting to object quicker
+        reward -= 2
 
         return reward
 
@@ -976,6 +986,10 @@ class HsrPybulletEnv(gym.Env):
         """
         base_vel = self.get_joint_velocities()[:2]  # X and Y components
         return base_vel if xy_components else np.linalg.norm(base_vel)
+
+    def distance_from_origin(self, xy_coordinates: list):
+        assert len(xy_coordinates) == 2, f"{Color.Red.value}distance_from_origin() expects a list of 2 elements, instead got {xy_coordinates} whose length is {len(xy_coordinates)}{Color.Color_Off.value}"
+        return np.linalg.norm(xy_coordinates)
 
     def calculate_inverse_kinematics(self, position_xyz: list, quaternion_xyzw: list = None, seed_config: list = None, verbose=False):
         """
