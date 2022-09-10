@@ -203,7 +203,7 @@ class HsrPybulletEnv(gym.Env):
         self.episode_max_duration = 60   # seconds
 
         self.previous_proximity_to_object = float('inf')
-        self.proximity_change_threshold = 0.25  # meter
+        self.proximity_change_threshold = 0.1  # meter
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_and_observation_spaces = True
@@ -264,6 +264,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.episode_num = 0
         self.episode_reward = 0
+        self.training_mode = False
 
         self.time_of_big_bang = None
 
@@ -328,8 +329,11 @@ class HsrPybulletEnv(gym.Env):
         time_remaining = self.episode_max_duration - time_since_episode_start
         print(f"\treward: {reward}, time: {time_since_episode_start:.1f}s, time left: {time_remaining:.1f}s")
         if self.done:
-            time_since_big_bang = int(time.time() - self.time_of_big_bang)
-            print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value} (time since big bang: {time_since_big_bang}s)")
+            if self.training_mode:
+                time_since_big_bang = int(time.time() - self.time_of_big_bang)
+                print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value} (time since big bang: {time_since_big_bang}s)")
+            else:
+                print(f"{Color.Green.value}End of episode {self.episode_num}, reason: collision_detected({str(collision_detected)}), termination_criteria_met({str(episode_termination_criteria_met)}), reward: {self.episode_reward}{Color.Color_Off.value}")
 
         return obs, reward, self.done, info
 
@@ -598,7 +602,10 @@ class HsrPybulletEnv(gym.Env):
         reward = 0.0
 
         if self.moving_closer_to_object():
-            reward += 5
+            if self.calculate_base_proximity_to_object() <= 0.5:
+                reward += 50
+            else:
+                reward += 5
         else:
             reward += -10
 
@@ -1244,9 +1251,11 @@ if __name__ == "__main__":
 
     print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
     env.time_of_big_bang = time.time()
+    env.training_mode = True
     model.learn(total_timesteps=10000)
     model.save(saved_model_name)
     print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
+    env.training_mode = False
 
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
