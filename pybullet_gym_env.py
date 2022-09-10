@@ -204,7 +204,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.previous_proximity_to_object = float('inf')
         self.proximity_change_threshold = 0.1  # meter
-        self.acceptable_proximity_to_object = 0.5
+        self.acceptable_proximity_to_object = 0.5   # meter
 
         # https://stable-baselines.readthedocs.io/en/master/guide/rl_tips.html#tips-and-tricks-when-creating-a-custom-environment
         self.normalized_action_and_observation_spaces = True
@@ -656,8 +656,12 @@ class HsrPybulletEnv(gym.Env):
         current_base_position_xy = self.get_base_position_xy()
         line_from_xyz = [current_base_position_xy[0], current_base_position_xy[1], 0.0]
         line_to_xyz = [q[0], q[1], 0.0]
+        object_position_xyz, _ = self.get_object_pose()
+        object_position_xyz = list(object_position_xyz)
+        object_position_xyz[-1] = 0.0
 
-        line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=10.0)
+        action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=10.0)
+        ideal_action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, object_position_xyz, lineColorRGB=[0, 1, 0], lineWidth=5.0)
 
         self.bullet_client.setJointMotorControlArray(
             bodyUniqueId=self.robot_body_unique_id.id,
@@ -707,7 +711,8 @@ class HsrPybulletEnv(gym.Env):
             error = self.get_error(q, self.get_joint_values(), ignore_hand_joints=True)
             base_velocity = self.get_base_velocity()
 
-        self.bullet_client.removeUserDebugItem(line_id)
+        self.bullet_client.removeUserDebugItem(action_line_id)
+        self.bullet_client.removeUserDebugItem(ideal_action_line_id)
 
     def reset(self, verbose=False):
         self.remove_object_from_scene(self.added_obj_id)
