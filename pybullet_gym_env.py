@@ -263,6 +263,11 @@ class HsrPybulletEnv(gym.Env):
         self.collision_monitor_active = False
         self.collision_detected = False   # this being true doesn't mean anything if self.collision_monitor_active is False
 
+        # approach vector: dot product of two unit vectors will be within [-1, 1] because A.B = |A|*|B|*cos(θ))
+        self.approach_vector_dot_product = -1.0
+        self.approach_vector_dot_product_ideal = 1.0
+        self.approach_vector_dot_product_threshold = 0.0  # 90 or -90 degrees
+
         self.episode_num = 0
         self.episode_reward = 0
         self.training_mode = False
@@ -342,6 +347,7 @@ class HsrPybulletEnv(gym.Env):
         """
         Episode termination criteria;
             - episode duration has exceeded max episode duration
+            - approach vector of robot is more than 90 degrees off compared to ideal approach vector towards object
             - robot went outside square area of ±10m
             - object went outside square area of ±10m
             - robot went outside object radius
@@ -354,6 +360,11 @@ class HsrPybulletEnv(gym.Env):
             if (time.time() - self.episode_start_time) >= self.episode_max_duration:
                 print(f"\t{Color.Red.value}terminate_episode(): max episode duration {self.episode_max_duration}s exceeded{Color.Color_Off.value}")
                 return True
+
+        # approach vector of robot is more than 90 degrees off compared to ideal approach vector towards object
+        if self.approach_vector_dot_product <= self.approach_vector_dot_product_threshold:
+            print(f"\t{Color.Red.value}terminate_episode(): dot product is {self.approach_vector_dot_product:.3f}, approach vector is at >=90° compared to ideal approach vector{Color.Color_Off.value}")
+            return True
 
         # robot went outside square area of ±10m
         current_base_position_xy = self.get_base_position_xy()  # [x, y]
@@ -606,18 +617,27 @@ class HsrPybulletEnv(gym.Env):
             }
         }
 
-        reward = 0.0
+        reward = -2.0  # incentivize getting to object quicker
+
+        print("\tCalculating reward:")
+        print(f"\t\ttime penalty: -2")
 
         if self.moving_closer_to_object():
             if self.calculate_base_proximity_to_object() <= self.acceptable_proximity_to_object:
                 reward += 50
+                print(f"\t\tmoving closer, within {self.acceptable_proximity_to_object}m of object: +50")
             else:
                 reward += 5
+                print(f"\t\tmoving closer: +5")
         else:
             reward += -10
+            print(f"\t\tnot moving closer: -10")
 
-        # incentivize getting to object quicker
-        reward -= 2
+        # incentivize sticking close to ideal approach vector
+        if self.approach_vector_dot_product > self.approach_vector_dot_product_threshold:  # means self.approach_vector_dot_product is (0, 1]
+            r = 10 * self.approach_vector_dot_product
+            reward += r
+            print(f"\t\tapproach vector reward: +{r:.4f}")
 
         return reward
 
@@ -660,8 +680,13 @@ class HsrPybulletEnv(gym.Env):
         object_position_xyz = list(object_position_xyz)
         object_position_xyz[-1] = 0.0
 
-        action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=10.0)
+        action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=5.0)
         ideal_action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, object_position_xyz, lineColorRGB=[0, 1, 0], lineWidth=5.0)
+        vec_action_line = np.array(line_to_xyz) - np.array(line_from_xyz)
+        vec_action_line = vec_action_line / np.linalg.norm(vec_action_line)
+        vec_ideal_action_line = np.array(object_position_xyz) - np.array(line_from_xyz)
+        vec_ideal_action_line = vec_ideal_action_line / np.linalg.norm(vec_ideal_action_line)
+        self.approach_vector_dot_product = np.dot(vec_action_line, vec_ideal_action_line)
 
         self.bullet_client.setJointMotorControlArray(
             bodyUniqueId=self.robot_body_unique_id.id,
