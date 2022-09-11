@@ -253,10 +253,12 @@ class HsrPybulletEnv(gym.Env):
         self.observation_space_length = 24  # 15 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
         self.observation_space = self.construct_observation_space()
         self.action_space = self.construct_action_space()
+        self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
         self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
 
         self.camera_thread = threading.Thread(target=self.spin)
+        self.keep_alive_camera_thread = True
         self.camera_thread.start()
 
         # collision checking while _executing_ an action
@@ -275,8 +277,14 @@ class HsrPybulletEnv(gym.Env):
         self.time_of_big_bang = None
 
     def close(self):
+        print("close():")
+        self.keep_alive_camera_thread = False
         self.camera_thread.join()
+        print("\tcamera thread has joined")
+        self.exit_setting_joint_position.set()
         self.px_client.release()
+        print("\tpybullet client has been released")
+        print("close() completed")
 
     def spawn_object_at_random_location(self, model_name: str, verbose=False):
         random_probability = random.uniform(0, 1)
@@ -703,7 +711,7 @@ class HsrPybulletEnv(gym.Env):
         max_base_velocity_xy = [0, 0]
         robot_has_started_moving = False
         base_log_start, base_log_freq = start_time, 10.0
-        while True:
+        while not self.exit_setting_joint_position.is_set():
             if not robot_has_started_moving and self.base_is_moving():
                 robot_has_started_moving = True
 
@@ -731,8 +739,9 @@ class HsrPybulletEnv(gym.Env):
                 for i in range(len(all_joint_names)):
                     print(f"\t\t{all_joint_names[i]}: {current_joint_values[i]:.4f} (target: {q[i]:.4f}, error: {q[i] - current_joint_values[i]:.4f})")
 
-            time.sleep(0.01)
+            # time.sleep(0.01)
             self.bullet_client.stepSimulation()   # already running in a parallel thread that's executing self.spin()
+            self.exit_setting_joint_position.wait(0.01)
             error = self.get_error(q, self.get_joint_values(), ignore_hand_joints=True)
             base_velocity = self.get_base_velocity()
 
@@ -880,7 +889,7 @@ class HsrPybulletEnv(gym.Env):
         return np.linalg.norm(q1[:3] - q2[:3])   # order of q is the same as all_joint_names
 
     def spin(self):
-        while True:
+        while self.keep_alive_camera_thread:
             try:
                 width, height, rgb_img, depth_img, seg_img = self.get_camera_image()
             except Exception as e:
@@ -888,6 +897,8 @@ class HsrPybulletEnv(gym.Env):
             # self.bullet_client.stepSimulation()  # interferes with reset()
             self.collided_with_object(exclude_hand_and_wrist=False, verbose=False)
             time.sleep(0.001)
+
+        print("Camera thread while loop exited")
 
     def print_joint_values(self, q, title=None, tab_indent=0):
         if len(q) != self.num_dofs:
@@ -1284,8 +1295,16 @@ if __name__ == "__main__":
     model = PPO('MlpPolicy', env, verbose=1)
 
     def on_exit():
-        model.save(saved_model_name)
-        print(f"{Color.Cyan.value}Keyboard interrupt, model saved as name {saved_model_name}{Color.Color_Off.value}")
+        try:
+            model.save(saved_model_name)
+        except Exception as e:
+            print(f"{Color.Red.value}Keyboard interrupt, model COULD NOT BE SAVED{Color.Color_Off.value}")
+        else:
+            print(f"{Color.Cyan.value}Keyboard interrupt, model saved as name {saved_model_name}{Color.Color_Off.value}")
+        finally:
+            print(f"{Color.Cyan.value}Keyboard interrupt, attempting to shutdown sim. environment...{Color.Color_Off.value}")
+            env.close()
+            print(f"{Color.Cyan.value}Keyboard interrupt, sim. environment shutdown{Color.Color_Off.value}")
 
     atexit.register(on_exit)
 
@@ -1300,13 +1319,15 @@ if __name__ == "__main__":
     model.save(saved_model_name)
     print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
     env.training_mode = False
+    atexit.unregister(on_exit)
+    env.close()
 
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
     # del model
 
-    # model = PPO.load(saved_model_name)
+    # model = PPO.load(saved_model_name, print_system_info=True)
 
     # obs = env.reset()
     # while True:
