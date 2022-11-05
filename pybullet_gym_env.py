@@ -287,11 +287,9 @@ class HsrPybulletEnv(gym.Env):
         print("close() completed")
 
     def spawn_object_at_random_location(self, model_name: str, verbose=False):
-        random_probability = random.uniform(0, 1)
-
         # robot xy location is limited to (±10, ±10)
-        min_xy = 3.0 if random_probability > 0.5 else -3.0
-        max_xy = 8.0 if random_probability > 0.5 else -8.0
+        min_xy = 3.0 if random.uniform(0, 1) > 0.5 else -3.0
+        max_xy = 8.0 if random.uniform(0, 1) > 0.5 else -8.0
 
         # NOTE: if min_xy or max_xy changes, also update construct_observation_space()
 
@@ -1288,7 +1286,6 @@ if __name__ == "__main__":
     #     obs, reward, done, info = env.step(action)
     #     if done:
     #         obs = env.reset()
-    #         env.start_episode()
 
     # RL
     saved_model_name = "ppo_approaching_object"
