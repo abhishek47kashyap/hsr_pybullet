@@ -142,6 +142,8 @@ def main():
     bullet_client.setAdditionalSearchPath(pybullet_data.getDataPath())
     bullet_client.loadURDF("plane.urdf")
 
+    bullet_client.setGravity(0, 0, -9.8)
+
     robot_body_unique_id = px.Robot(
         urdf_file_path,
         use_fixed_base=use_fixed_base,
@@ -156,14 +158,14 @@ def main():
     print(f"Number of joints: {n_joints}, number of dofs: {n_dofs}")
     joint_lower_limits, joint_upper_limits = get_joint_limits(robot_body_unique_id)
 
-    model_name = "007_tuna_fish_can"
+    model_name = "002_master_chef_can"
     mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
     collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
     mesh = trimesh.load(mesh_path, force='mesh', process=False)
     mesh.density = 150
-    scale = 1
 
-    centroid = mesh.centroid
+    centroid = deepcopy(mesh.centroid)
+    centroid[-1] -= (0.1452/2.0)
     scale = 1
     scale = [scale, scale, scale]
 
@@ -188,9 +190,7 @@ def main():
         baseVisualShapeIndex=visual_shape_id,
         baseInertialFramePosition=np.array(mesh.center_mass - centroid),
     )
-
     bullet_client.changeDynamics(obj_id, -1, lateralFriction=0.25)
-    bullet_client.setGravity(0, 0, -9.8)
 
     renderer = bullet_client.ER_BULLET_HARDWARE_OPENGL   # or pybullet_client.ER_TINY_RENDERER
 
@@ -215,8 +215,24 @@ def main():
         if first_iteration:
             first_iteration = False
 
-            print("Camera config:")
+            print("\nCamera config:")
             print(camera_config)
+
+            print("\nCentroid")
+            print(centroid)
+
+            print("\nLWH from PyBullet:")
+            boundaries = bullet_client.getAABB(obj_id)
+            lwh = np.array(boundaries[1])-np.array(boundaries[0])
+            print(lwh)
+
+            print("\nLWH from trimesh:")
+            vs = mesh.vertices
+            x = vs[:,0]
+            y = vs[:,1]
+            z = vs[:,2]
+            print([max(dirn)-min(dirn) for dirn in [x, y, z]])
+
 
         width, height, rgb_img, depth_img, seg_img = bullet_client.getCameraImage(
             camera_config["image_size"][1],
@@ -227,6 +243,35 @@ def main():
             flags=bullet_client.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX,
             renderer=renderer
             )
+        
+        gripper_fully_open_proximal = 1.0
+        gripper_fully_open_distal = -np.pi/4.0
+        gripper_fully_closed = 0.0
+        q = [
+                0.5, # 'joint_x'
+                -0.06, # 'joint_y'
+                0.0, # 'joint_rz'
+                0.0, # 'torso_lift_joint'
+                0.0, # 'head_pan_joint'
+                0.0, # 'head_tilt_joint'
+                0.025, # 'arm_lift_joint'
+                (-np.pi/2.0), # 'arm_flex_joint'
+                0.0, # 'arm_roll_joint'
+                (-np.pi/2.0), # 'wrist_flex_joint'
+                0.0, # 'wrist_roll_joint'
+                gripper_fully_open_proximal, # 'hand_l_proximal_joint'
+                gripper_fully_open_distal, # 'hand_l_distal_joint'
+                gripper_fully_open_proximal, # 'hand_r_proximal_joint'
+                gripper_fully_open_distal, # 'hand_r_distal_joint'
+            ]
+        
+        bullet_client.setJointMotorControlArray(
+            bodyUniqueId=robot_body_unique_id.id,
+            jointIndices=robot_body_unique_id.free_joint_indices,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=q,
+            targetVelocities=np.zeros_like(q)
+        )
 
         time.sleep(0.01)
         bullet_client.stepSimulation()
