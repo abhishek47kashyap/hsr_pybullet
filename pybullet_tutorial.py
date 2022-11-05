@@ -194,6 +194,12 @@ def main():
 
     renderer = bullet_client.ER_BULLET_HARDWARE_OPENGL   # or pybullet_client.ER_TINY_RENDERER
 
+    # camera viewports (https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=11940)
+    camera_viewports_enabled = 1   # enable:1, disable: 0
+    bullet_client.configureDebugVisualizer(bullet_client.COV_ENABLE_RGB_BUFFER_PREVIEW, camera_viewports_enabled)
+    bullet_client.configureDebugVisualizer(bullet_client.COV_ENABLE_DEPTH_BUFFER_PREVIEW, camera_viewports_enabled)
+    bullet_client.configureDebugVisualizer(bullet_client.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, camera_viewports_enabled)
+
     first_iteration = True
 
     while True:
