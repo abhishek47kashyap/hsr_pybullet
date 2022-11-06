@@ -195,7 +195,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        gui = False
+        gui = True
         hand = True
 
         self.done = False
@@ -223,7 +223,7 @@ class HsrPybulletEnv(gym.Env):
         self.camera_config = deepcopy(CAMERA_REALSENSE_CONFIG if hand else CAMERA_XTION_CONFIG)
 
         self.end_effector_joint_frame = 'hand_palm_joint'
-        self.end_effector_link_idx = 35  # hand_palm_joint, hand_palm_link
+        self.end_effector_link_idx = 47  # hand_palm_joint, hand_palm_link
 
         self.bullet_client = bc.BulletClient(connection_mode=self.connection_mode)
         self.px_client = px.Client(client_id=self.bullet_client._client)
@@ -255,7 +255,8 @@ class HsrPybulletEnv(gym.Env):
         self.action_space = self.construct_action_space()
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
-        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
+        # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
+        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(2.0, -1.0, 0), verbose=True)
 
         self.camera_thread = threading.Thread(target=self.spin)
         self.keep_alive_camera_thread = True
@@ -275,6 +276,20 @@ class HsrPybulletEnv(gym.Env):
         self.training_mode = False
 
         self.time_of_big_bang = None
+
+        obj_position_xyz, obj_quaternion_xyzw = self.get_object_pose(verbose=True)
+        obj_position_xyz = list(obj_position_xyz)
+        obj_position_xyz[-1] += 0.1
+        obj_quaternion_rpy = self.bullet_client.getEulerFromQuaternion(quaternion=obj_quaternion_xyzw, physicsClientId=self.bullet_client._client)
+        print(f"RPY: {obj_quaternion_rpy}")
+        obj_quaternion_rpy = list(obj_quaternion_rpy)
+        obj_quaternion_rpy[0] = -np.pi/2
+        obj_quaternion_xyzw = self.bullet_client.getQuaternionFromEuler(eulerAngles=obj_quaternion_rpy, physicsClientId=self.bullet_client._client)
+        print(f"New quat: {obj_quaternion_xyzw}")
+        seed_config = [0.0] * self.num_dofs
+
+        q = self.calculate_inverse_kinematics(position_xyz=obj_position_xyz, quaternion_xyzw=obj_quaternion_xyzw, seed_config=seed_config, verbose=True)
+        self.set_joint_position(q, verbose=True)
 
     def close(self):
         print("close():")
@@ -1315,21 +1330,21 @@ if __name__ == "__main__":
             env.close()
             print(f"{Color.Cyan.value}Keyboard interrupt, sim. environment shutdown{Color.Color_Off.value}")
 
-    atexit.register(on_exit)
+    # atexit.register(on_exit)
 
     # print(f"------------> Before training...")
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-    print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
-    env.time_of_big_bang = time.time()
-    env.training_mode = True
-    model.learn(total_timesteps=10000)
-    model.save(saved_model_name)
-    print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
-    env.training_mode = False
-    atexit.unregister(on_exit)
-    env.close()
+    # print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
+    # env.time_of_big_bang = time.time()
+    # env.training_mode = True
+    # model.learn(total_timesteps=10000)
+    # model.save(saved_model_name)
+    # print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
+    # env.training_mode = False
+    # atexit.unregister(on_exit)
+    # env.close()
 
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")

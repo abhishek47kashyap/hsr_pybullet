@@ -172,7 +172,7 @@ def main():
     print(f"Number of joints: {n_joints}, number of dofs: {n_dofs}")
     joint_lower_limits, joint_upper_limits = get_joint_limits(robot_body_unique_id)
 
-    model_name = "002_master_chef_can"
+    model_name = "036_wood_block"
     mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
     collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
     mesh = trimesh.load(mesh_path, force='mesh', process=False)
@@ -217,8 +217,48 @@ def main():
     bullet_client.configureDebugVisualizer(bullet_client.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, camera_viewports_enabled)
 
     first_iteration = True
+    target_velocities = np.zeros(n_dofs)
+
+    gripper_fully_open_proximal = 10.0
+    gripper_fully_open_distal = -np.pi/2.0
+    gripper_fully_closed = 0.0
+
+    pre_grasp = [
+            0.52, # 'joint_x'
+            -0.088, # 'joint_y'
+            0.0, # 'joint_rz'
+            0.0, # 'torso_lift_joint'
+            0.0, # 'head_pan_joint'
+            0.0, # 'head_tilt_joint'
+            0.1, # 'arm_lift_joint'
+            (-np.pi/2.0), # 'arm_flex_joint'
+            0.0, # 'arm_roll_joint'
+            (-np.pi/2.0), # 'wrist_flex_joint'
+            0.0, # 'wrist_roll_joint'
+            gripper_fully_open_proximal, # 'hand_l_proximal_joint'
+            gripper_fully_open_distal, # 'hand_l_distal_joint'
+            gripper_fully_open_proximal, # 'hand_r_proximal_joint'
+            gripper_fully_open_distal, # 'hand_r_distal_joint'
+        ]
+    
+    grasp = deepcopy(pre_grasp)
+    grasp[6] -= 0.05
+
+    close_gripper = deepcopy(grasp)
+    close_gripper[-4:] = [gripper_fully_closed] * 4
+
+    lift_up = deepcopy(close_gripper)
+    lift_up[6] += 0.4
+
+    state_durations = [1, 1, 1, 1]
+    state_log = [False for i in range(len(state_durations))]
+    current_state = 0
+    state_t = 0.0
+    control_dt = 1./120.
 
     while True:
+        state_t += control_dt
+
         camera_link_state = robot_body_unique_id.get_link_state_by_name(camera_joint_frame)
         camera_link_position = camera_link_state.world_link_frame_position
         camera_link_orientation = camera_link_state.world_link_frame_orientation
@@ -244,36 +284,63 @@ def main():
             renderer=renderer
             )
         
-        gripper_fully_open_proximal = 1.0
-        gripper_fully_open_distal = -np.pi/4.0
-        gripper_fully_closed = 0.0
-        q = [
-                0.5, # 'joint_x'
-                -0.06, # 'joint_y'
-                0.0, # 'joint_rz'
-                0.0, # 'torso_lift_joint'
-                0.0, # 'head_pan_joint'
-                0.0, # 'head_tilt_joint'
-                0.025, # 'arm_lift_joint'
-                (-np.pi/2.0), # 'arm_flex_joint'
-                0.0, # 'arm_roll_joint'
-                (-np.pi/2.0), # 'wrist_flex_joint'
-                0.0, # 'wrist_roll_joint'
-                gripper_fully_open_proximal, # 'hand_l_proximal_joint'
-                gripper_fully_open_distal, # 'hand_l_distal_joint'
-                gripper_fully_open_proximal, # 'hand_r_proximal_joint'
-                gripper_fully_open_distal, # 'hand_r_distal_joint'
-            ]
-        
-        bullet_client.setJointMotorControlArray(
-            bodyUniqueId=robot_body_unique_id.id,
-            jointIndices=robot_body_unique_id.free_joint_indices,
-            controlMode=p.POSITION_CONTROL,
-            targetPositions=q,
-            targetVelocities=np.zeros_like(q)
-        )
+        if current_state == 0:
+            if state_log[current_state] == False:
+                print("Pre-grasp")
+                state_log[current_state] = True
 
-        time.sleep(0.01)
+            bullet_client.setJointMotorControlArray(
+                bodyUniqueId=robot_body_unique_id.id,
+                jointIndices=robot_body_unique_id.free_joint_indices,
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=pre_grasp,
+                targetVelocities=target_velocities
+            )
+        elif current_state == 1:
+            if state_log[current_state] == False:
+                print("Grasp")
+                state_log[current_state] = True
+
+            bullet_client.setJointMotorControlArray(
+                bodyUniqueId=robot_body_unique_id.id,
+                jointIndices=robot_body_unique_id.free_joint_indices,
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=grasp,
+                targetVelocities=target_velocities
+            )
+        elif current_state == 2:
+            if state_log[current_state] == False:
+                print("Closing gripper")
+                state_log[current_state] = True
+
+            bullet_client.setJointMotorControlArray(
+                bodyUniqueId=robot_body_unique_id.id,
+                jointIndices=robot_body_unique_id.free_joint_indices,
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=close_gripper,
+                targetVelocities=target_velocities
+            )
+        elif current_state == 3:
+            if state_log[current_state] == False:
+                print("Closing gripper")
+                state_log[current_state] = True
+
+            bullet_client.setJointMotorControlArray(
+                bodyUniqueId=robot_body_unique_id.id,
+                jointIndices=robot_body_unique_id.free_joint_indices,
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=lift_up,
+                targetVelocities=target_velocities
+            )
+        
+        if state_t > state_durations[current_state]:
+            current_state += 1
+            if current_state >= len(state_durations):
+                break
+                # current_state = 0
+                # state_log = [False for i in range(len(state_durations))]
+            state_t = 0
+
         bullet_client.stepSimulation()
 
 if __name__ == "__main__":
