@@ -1195,6 +1195,20 @@ class HsrPybulletEnv(gym.Env):
 
         return position_xyz, quaternion_xyzw
 
+    def get_object_dimensions(self, obj_mesh):
+        """
+        Get dimensions of the object mesh.
+
+        To get this information from pybullet (adds some padding to the actual dimensions):
+            boundaries = bullet_client.getAABB(obj_id)
+            lwh = np.array(boundaries[1])-np.array(boundaries[0])
+        """
+        vs = obj_mesh.vertices
+        x = vs[:,0]
+        y = vs[:,1]
+        z = vs[:,2]
+        return [max(dirn)-min(dirn) for dirn in [x, y, z]]
+
     def add_object_to_scene(self, model_name: str, base_position: tuple, verbose=False):
         mesh_path = 'assets/ycb/{}/google_16k/nontextured.stl'.format(model_name)
         collision_path = 'assets/ycb/{}/google_16k/collision.obj'.format(model_name)
@@ -1212,7 +1226,11 @@ class HsrPybulletEnv(gym.Env):
         mesh.density = 150
         scale = 1
 
-        centroid = mesh.centroid
+        # object spawns below the floor, so centroid Z has to be corrected
+        obj_lwh = self.get_object_dimensions(mesh)
+        centroid = deepcopy(mesh.centroid)
+        centroid[-1] -= (obj_lwh[2]/2.0)
+
         scale = 1
         scale = [scale, scale, scale]
 

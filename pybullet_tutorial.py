@@ -128,6 +128,20 @@ def get_projection_matrix(pybullet_client, camera_config: dict):
 
     return pybullet_client.computeProjectionMatrixFOV(fovh, aspect_ratio, znear, zfar)
 
+def get_object_dimensions(obj_mesh):
+    """
+    Get dimensions of the object mesh.
+
+    To get this information from pybullet:
+        boundaries = bullet_client.getAABB(obj_id)
+        lwh = np.array(boundaries[1])-np.array(boundaries[0])
+    """
+    vs = obj_mesh.vertices
+    x = vs[:,0]
+    y = vs[:,1]
+    z = vs[:,2]
+    return [max(dirn)-min(dirn) for dirn in [x, y, z]]
+
 def main():
     urdf_file_path = "hsrb_description/robots/hsrb.urdf"
     use_fixed_base = True
@@ -164,8 +178,10 @@ def main():
     mesh = trimesh.load(mesh_path, force='mesh', process=False)
     mesh.density = 150
 
+    obj_lwh = get_object_dimensions(mesh)
     centroid = deepcopy(mesh.centroid)
-    centroid[-1] -= (0.1452/2.0)
+    centroid[-1] -= (obj_lwh[2]/2.0)  # without this, object spawns below the floor
+
     scale = 1
     scale = [scale, scale, scale]
 
@@ -217,22 +233,6 @@ def main():
 
             print("\nCamera config:")
             print(camera_config)
-
-            print("\nCentroid")
-            print(centroid)
-
-            print("\nLWH from PyBullet:")
-            boundaries = bullet_client.getAABB(obj_id)
-            lwh = np.array(boundaries[1])-np.array(boundaries[0])
-            print(lwh)
-
-            print("\nLWH from trimesh:")
-            vs = mesh.vertices
-            x = vs[:,0]
-            y = vs[:,1]
-            z = vs[:,2]
-            print([max(dirn)-min(dirn) for dirn in [x, y, z]])
-
 
         width, height, rgb_img, depth_img, seg_img = bullet_client.getCameraImage(
             camera_config["image_size"][1],
