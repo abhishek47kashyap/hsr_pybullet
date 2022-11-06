@@ -1048,8 +1048,8 @@ class HsrPybulletEnv(gym.Env):
             "upperLimits": self.joint_limits_upper,
             "maxNumIterations": 1000,
             "residualThreshold": 1e-4,
-            # "solver": p.IK_DLS,
-            "solver": p.IK_SDLS,
+            "jointDamping": [0.01]*self.num_dofs,
+            "solver": p.IK_DLS,   # p.IK_SDLS segfaults .. why?
             "physicsClientId": self.bullet_client._client
         }
         if quaternion_xyzw:
@@ -1067,13 +1067,7 @@ class HsrPybulletEnv(gym.Env):
             bodyUniqueId=self.robot_body_unique_id.id,
             endEffectorLinkIndex=self.end_effector_link_idx,
             targetPosition=position_xyz,
-            targetOrientation=quaternion_xyzw,
-            lowerLimits=self.joint_limits_lower,
-            upperLimits=self.joint_limits_upper,
-            restPoses=self.get_joint_values(),
-            maxNumIterations=1000,
-            residualThreshold=1e-4,
-            physicsClientId=self.bullet_client._client
+            **ik_optional_args
         )
 
         if verbose:
