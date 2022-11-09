@@ -256,6 +256,13 @@ def main():
     state_t = 0.0
     control_dt = 1./120.
 
+    setJointMotorControlArray_args = {
+        "bodyUniqueId": robot_body_unique_id.id,
+        "jointIndices": robot_body_unique_id.free_joint_indices,
+        "controlMode": p.POSITION_CONTROL,
+        "targetVelocities": target_velocities
+    }
+
     while True:
         state_t += control_dt
 
@@ -290,11 +297,8 @@ def main():
                 state_log[current_state] = True
 
             bullet_client.setJointMotorControlArray(
-                bodyUniqueId=robot_body_unique_id.id,
-                jointIndices=robot_body_unique_id.free_joint_indices,
-                controlMode=p.POSITION_CONTROL,
                 targetPositions=pre_grasp,
-                targetVelocities=target_velocities
+                **setJointMotorControlArray_args
             )
         elif current_state == 1:
             if state_log[current_state] == False:
@@ -302,11 +306,8 @@ def main():
                 state_log[current_state] = True
 
             bullet_client.setJointMotorControlArray(
-                bodyUniqueId=robot_body_unique_id.id,
-                jointIndices=robot_body_unique_id.free_joint_indices,
-                controlMode=p.POSITION_CONTROL,
                 targetPositions=grasp,
-                targetVelocities=target_velocities
+                **setJointMotorControlArray_args
             )
         elif current_state == 2:
             if state_log[current_state] == False:
@@ -314,11 +315,8 @@ def main():
                 state_log[current_state] = True
 
             bullet_client.setJointMotorControlArray(
-                bodyUniqueId=robot_body_unique_id.id,
-                jointIndices=robot_body_unique_id.free_joint_indices,
-                controlMode=p.POSITION_CONTROL,
                 targetPositions=close_gripper,
-                targetVelocities=target_velocities
+                **setJointMotorControlArray_args
             )
         elif current_state == 3:
             if state_log[current_state] == False:
@@ -326,11 +324,8 @@ def main():
                 state_log[current_state] = True
 
             bullet_client.setJointMotorControlArray(
-                bodyUniqueId=robot_body_unique_id.id,
-                jointIndices=robot_body_unique_id.free_joint_indices,
-                controlMode=p.POSITION_CONTROL,
                 targetPositions=lift_up,
-                targetVelocities=target_velocities
+                **setJointMotorControlArray_args
             )
         
         if state_t > state_durations[current_state]:
