@@ -20,6 +20,7 @@ import numpy as np
 from enum import Enum
 from copy import deepcopy
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 import time
 import random
 import os
@@ -39,6 +40,10 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common import results_plotter
+
+from sb3_utils import SaveOnBestTrainingRewardCallback
 
 np.set_printoptions(suppress=True)
 
@@ -195,7 +200,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        gui = True
+        gui = False
         hand = True
 
         self.done = False
@@ -277,19 +282,19 @@ class HsrPybulletEnv(gym.Env):
 
         self.time_of_big_bang = None
 
-        obj_position_xyz, obj_quaternion_xyzw = self.get_object_pose(verbose=True)
-        obj_position_xyz = list(obj_position_xyz)
-        obj_position_xyz[-1] += 0.1
-        obj_quaternion_rpy = self.bullet_client.getEulerFromQuaternion(quaternion=obj_quaternion_xyzw, physicsClientId=self.bullet_client._client)
-        print(f"RPY: {obj_quaternion_rpy}")
-        obj_quaternion_rpy = list(obj_quaternion_rpy)
-        obj_quaternion_rpy[0] = -np.pi/2
-        obj_quaternion_xyzw = self.bullet_client.getQuaternionFromEuler(eulerAngles=obj_quaternion_rpy, physicsClientId=self.bullet_client._client)
-        print(f"New quat: {obj_quaternion_xyzw}")
-        seed_config = [0.0] * self.num_dofs
+        # obj_position_xyz, obj_quaternion_xyzw = self.get_object_pose(verbose=True)
+        # obj_position_xyz = list(obj_position_xyz)
+        # obj_position_xyz[-1] += 0.1
+        # obj_quaternion_rpy = self.bullet_client.getEulerFromQuaternion(quaternion=obj_quaternion_xyzw, physicsClientId=self.bullet_client._client)
+        # print(f"RPY: {obj_quaternion_rpy}")
+        # obj_quaternion_rpy = list(obj_quaternion_rpy)
+        # obj_quaternion_rpy[0] = -np.pi/2
+        # obj_quaternion_xyzw = self.bullet_client.getQuaternionFromEuler(eulerAngles=obj_quaternion_rpy, physicsClientId=self.bullet_client._client)
+        # print(f"New quat: {obj_quaternion_xyzw}")
+        # seed_config = [0.0] * self.num_dofs
 
-        q = self.calculate_inverse_kinematics(position_xyz=obj_position_xyz, quaternion_xyzw=obj_quaternion_xyzw, seed_config=seed_config, verbose=True)
-        self.set_joint_position(q, verbose=True)
+        # q = self.calculate_inverse_kinematics(position_xyz=obj_position_xyz, quaternion_xyzw=obj_quaternion_xyzw, seed_config=seed_config, verbose=True)
+        # self.set_joint_position(q, verbose=True)
 
     def close(self):
         print("close():")
@@ -1296,6 +1301,37 @@ class HsrPybulletEnv(gym.Env):
         self.step(action=q, verbose=False)
 
 
+def moving_average(values, window):
+    """
+    Smooth values by doing a moving average
+    :param values: (numpy array)
+    :param window: (int)
+    :return: (numpy array)
+    """
+    weights = np.repeat(1.0, window) / window
+    return np.convolve(values, weights, 'valid')
+
+
+def plot_results(log_folder, title='Learning Curve'):
+    """
+    plot the results
+
+    :param log_folder: (str) the save location of the results to plot
+    :param title: (str) the title of the task to plot
+    """
+    x, y = results_plotter.ts2xy(results_plotter.load_results(log_folder), 'timesteps')
+    y = moving_average(y, window=50)
+    # Truncate x
+    x = x[len(x) - len(y):]
+
+    fig = plt.figure(title)
+    plt.plot(x, y)
+    plt.xlabel('Number of Timesteps')
+    plt.ylabel('Rewards')
+    plt.title(title + " Smoothed")
+    plt.show()
+
+
 if __name__ == "__main__":
     env = HsrPybulletEnv()
     # check_env(env)
@@ -1316,6 +1352,10 @@ if __name__ == "__main__":
 
     # RL
     saved_model_name = "ppo_approaching_object"
+    log_dir = "/root/HSR/hsr_pybullet/sb3_logs/"
+    os.makedirs(log_dir, exist_ok=True)
+    env = Monitor(env, log_dir)
+    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir)
     model = PPO('MlpPolicy', env, verbose=1)
 
     def on_exit():
@@ -1336,15 +1376,20 @@ if __name__ == "__main__":
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-    # print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
-    # env.time_of_big_bang = time.time()
-    # env.training_mode = True
-    # model.learn(total_timesteps=10000)
-    # model.save(saved_model_name)
-    # print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
-    # env.training_mode = False
-    # atexit.unregister(on_exit)
-    # env.close()
+    print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
+    env.time_of_big_bang = time.time()
+    env.training_mode = True
+    timesteps = 1e5
+    model.learn(total_timesteps=int(timesteps), callback=callback)
+    model.save(saved_model_name)
+    print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
+    env.training_mode = False
+    atexit.unregister(on_exit)
+    env.close()
+
+    results_plotter.plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "HSR PyBullet")
+
+    plot_results(log_dir)
 
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
