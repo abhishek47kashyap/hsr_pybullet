@@ -28,9 +28,12 @@ all_joint_names = [  # order is important
     'arm_roll_joint',
     'wrist_flex_joint',
     'wrist_roll_joint',
+    'hand_motor_joint',
     'hand_l_proximal_joint',
+    'hand_l_spring_proximal_joint',
     'hand_l_distal_joint',
     'hand_r_proximal_joint',
+    'hand_r_spring_proximal_joint',
     'hand_r_distal_joint'
     ]
 
@@ -46,11 +49,52 @@ class JointName(Enum):
     arm_roll_joint = all_joint_names[8]
     wrist_flex_joint = all_joint_names[9]
     wrist_roll_joint = all_joint_names[10]
-    hand_l_proximal_joint = all_joint_names[11]
-    hand_l_distal_joint = all_joint_names[12]
-    hand_r_proximal_joint = all_joint_names[13]
-    hand_r_distal_joint = all_joint_names[14]
+    hand_motor_joint = all_joint_names[11]
+    hand_l_proximal_joint = all_joint_names[12]
+    hand_l_spring_proximal_joint = all_joint_names[13]
+    hand_l_distal_joint = all_joint_names[14]
+    hand_r_proximal_joint = all_joint_names[15]
+    hand_r_spring_proximal_joint = all_joint_names[16]
+    hand_r_distal_joint = all_joint_names[17]
 
+open_gripper_joint_values = {
+    JointName.hand_motor_joint.value: 1.24,              # joint 36
+    JointName.hand_l_spring_proximal_joint.value: 0.0,   # joint 38
+    JointName.hand_r_spring_proximal_joint.value: 0.0,   # joint 44
+}
+close_gripper_joint_values = {
+    JointName.hand_motor_joint.value: -0.798,              # joint 36
+    JointName.hand_l_spring_proximal_joint.value: 0.698,   # joint 38
+    JointName.hand_r_spring_proximal_joint.value: 0.698,   # joint 44
+}
+
+def close_gripper(robot_body_unique_id, bullet_client):
+    target_positions = [
+        close_gripper_joint_values[JointName.hand_motor_joint.value],
+        close_gripper_joint_values[JointName.hand_l_spring_proximal_joint.value],
+        close_gripper_joint_values[JointName.hand_r_spring_proximal_joint.value]
+    ]
+    bullet_client.setJointMotorControlArray(
+        targetPositions=target_positions,
+        bodyUniqueId=robot_body_unique_id.id,
+        jointIndices=[36, 38, 44],
+        controlMode=p.POSITION_CONTROL,
+        targetVelocities=[1, 1, 1]
+    )
+
+def open_gripper(robot_body_unique_id, bullet_client):
+    target_positions = [
+        open_gripper_joint_values[JointName.hand_motor_joint.value],
+        open_gripper_joint_values[JointName.hand_l_spring_proximal_joint.value],
+        open_gripper_joint_values[JointName.hand_r_spring_proximal_joint.value]
+    ]
+    bullet_client.setJointMotorControlArray(
+        targetPositions=target_positions,
+        bodyUniqueId=robot_body_unique_id.id,
+        jointIndices=[36, 38, 44],
+        controlMode=p.POSITION_CONTROL,
+        targetVelocities=[1, 1, 1]
+    )
 
 def get_joint_value(robot_body_unique_id, joint_name: JointName):
     if joint_name.value not in all_joint_names:
@@ -81,6 +125,25 @@ def get_joint_limits(robot_body_unique_id, verbose=False):
             print(f"\t{name}: [{lower}, {upper}]")
 
     return joint_lower_limits, joint_upper_limits
+
+def print_joint_info(robot_body_unique_id):
+    joint_infos = robot_body_unique_id.get_joint_infos()
+
+    joint_indices = joint_infos["joint_index"]
+    joint_names = joint_infos["joint_name"]
+    joint_types = joint_infos["joint_type"]
+    joint_axes = joint_infos["joint_axis"]
+    joint_lower_limits = joint_infos["joint_lower_limit"]
+    joint_upper_limits = joint_infos["joint_upper_limit"]
+    joint_max_velocities = joint_infos["joint_max_velocity"]
+    joint_link_name = joint_infos["link_name"]
+
+    print("Joint information:")
+    for idx, name, jtype, jaxis, lower, upper, maxvel, jlink in zip(joint_indices, joint_names, joint_types, joint_axes, joint_lower_limits, joint_upper_limits, joint_max_velocities, joint_link_name):
+        joint_type = "prismatic" if jtype == 1 else "revolute"
+        joint_name = name.decode("utf-8")
+        link_name = jlink.decode("utf-8")
+        print(f"\t Joint idx {idx}, {joint_name}, type {joint_type}, axis {jaxis}, limits: [{lower}, {upper}], max. vel {maxvel}, link name {link_name}")
 
 
 CAMERA_XTION_CONFIG = {
@@ -219,36 +282,28 @@ def main():
     first_iteration = True
     target_velocities = np.zeros(n_dofs)
 
-    gripper_fully_open_proximal = 10.0
-    gripper_fully_open_distal = -np.pi/2.0
-    gripper_fully_closed = 0.0
+    current_joint_values = get_all_joint_values(robot_body_unique_id)
 
-    pre_grasp = [
-            0.52, # 'joint_x'
-            -0.088, # 'joint_y'
-            0.0, # 'joint_rz'
-            0.0, # 'torso_lift_joint'
-            0.0, # 'head_pan_joint'
-            0.0, # 'head_tilt_joint'
-            0.1, # 'arm_lift_joint'
-            (-np.pi/2.0), # 'arm_flex_joint'
-            0.0, # 'arm_roll_joint'
-            (-np.pi/2.0), # 'wrist_flex_joint'
-            0.0, # 'wrist_roll_joint'
-            gripper_fully_open_proximal, # 'hand_l_proximal_joint'
-            gripper_fully_open_distal, # 'hand_l_distal_joint'
-            gripper_fully_open_proximal, # 'hand_r_proximal_joint'
-            gripper_fully_open_distal, # 'hand_r_distal_joint'
-        ]
+    pre_grasp = deepcopy(current_joint_values)
+    pre_grasp[all_joint_names.index(JointName.joint_x.value)] = 0.52
+    pre_grasp[all_joint_names.index(JointName.joint_y.value)] = -0.088
+    pre_grasp[all_joint_names.index(JointName.arm_lift_joint.value)] = 0.1
+    pre_grasp[all_joint_names.index(JointName.arm_flex_joint.value)] = -np.pi/2.0
+    pre_grasp[all_joint_names.index(JointName.wrist_flex_joint.value)] = -np.pi/2.0
+    pre_grasp[all_joint_names.index(JointName.hand_motor_joint.value)] = open_gripper_joint_values[JointName.hand_motor_joint.value]
+    pre_grasp[all_joint_names.index(JointName.hand_l_spring_proximal_joint.value)] = open_gripper_joint_values[JointName.hand_l_spring_proximal_joint.value]
+    pre_grasp[all_joint_names.index(JointName.hand_r_spring_proximal_joint.value)] = open_gripper_joint_values[JointName.hand_r_spring_proximal_joint.value]
     
     grasp = deepcopy(pre_grasp)
-    grasp[6] -= 0.05
+    grasp[all_joint_names.index(JointName.arm_lift_joint.value)] -= 0.05
 
-    close_gripper = deepcopy(grasp)
-    close_gripper[-4:] = [gripper_fully_closed] * 4
+    close_gripper_jvalues = deepcopy(grasp)
+    close_gripper_jvalues[all_joint_names.index(JointName.hand_motor_joint.value)] = close_gripper_joint_values[JointName.hand_motor_joint.value]
+    close_gripper_jvalues[all_joint_names.index(JointName.hand_l_spring_proximal_joint.value)] = close_gripper_joint_values[JointName.hand_l_spring_proximal_joint.value]
+    close_gripper_jvalues[all_joint_names.index(JointName.hand_r_spring_proximal_joint.value)] = close_gripper_joint_values[JointName.hand_r_spring_proximal_joint.value]
 
-    lift_up = deepcopy(close_gripper)
-    lift_up[6] += 0.4
+    lift_up = deepcopy(close_gripper_jvalues)
+    lift_up[all_joint_names.index(JointName.arm_lift_joint.value)] += 0.4
 
     state_durations = [1, 1, 1, 1]
     state_log = [False for i in range(len(state_durations))]
@@ -314,13 +369,11 @@ def main():
                 print("Closing gripper")
                 state_log[current_state] = True
 
-            bullet_client.setJointMotorControlArray(
-                targetPositions=close_gripper,
-                **setJointMotorControlArray_args
-            )
+            close_gripper(robot_body_unique_id, bullet_client)
+
         elif current_state == 3:
             if state_log[current_state] == False:
-                print("Closing gripper")
+                print("Lifting up")
                 state_log[current_state] = True
 
             bullet_client.setJointMotorControlArray(
@@ -337,6 +390,8 @@ def main():
             state_t = 0
 
         bullet_client.stepSimulation()
+
+    px_client.release()
 
 if __name__ == "__main__":
     main()

@@ -1314,7 +1314,7 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </collision>
   </link>
-  <joint name="hand_motor_joint" type="fixed">
+  <joint name="hand_motor_joint" type="revolute">
     <axis xyz="1.0 0.0 0.0"/>
     <limit effort="100.0" lower="-0.798" upper="1.24" velocity="1.0"/>
     <parent link="hand_palm_link"/>
@@ -1344,7 +1344,7 @@ POSSIBILITY OF SUCH DAMAGE.
     </inertial>
     <dynamics friction="100" damping="100" />
   </link>
-  <joint name="hand_l_spring_proximal_joint" type="fixed">
+  <joint name="hand_l_spring_proximal_joint" type="revolute">
     <axis xyz="1.0 0.0 0.0"/>
     <limit effort="1.0" lower="0.0" upper="0.698" velocity="1.0"/>
     <parent link="hand_l_proximal_link"/>
@@ -1466,7 +1466,7 @@ POSSIBILITY OF SUCH DAMAGE.
     </inertial>
     <dynamics friction="100" damping="100" />
   </link>
-  <joint name="hand_r_spring_proximal_joint" type="fixed">
+  <joint name="hand_r_spring_proximal_joint" type="revolute">
     <axis xyz="-1.0 0.0 0.0"/>
     <limit effort="1.0" lower="0.0" upper="0.698" velocity="1.0"/>
     <parent link="hand_r_proximal_link"/>
