@@ -140,21 +140,24 @@ Joint information:
   Joint 49: b'hand_camera_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_camera_gazebo_frame'
 """
 all_joint_names = [  # order is important
-    'joint_x',                 # 0   (actual joint index: 0)
-    'joint_y',                 # 1   (actual joint index: 1)
-    'joint_rz',                # 2   (actual joint index: 2)
-    'torso_lift_joint',        # 3   (actual joint index: 17)
-    'head_pan_joint',          # 4   (actual joint index: 18)
-    'head_tilt_joint',         # 5   (actual joint index: 19)
-    'arm_lift_joint',          # 6   (actual joint index: 28)
-    'arm_flex_joint',          # 7   (actual joint index: 29)
-    'arm_roll_joint',          # 8   (actual joint index: 30)
-    'wrist_flex_joint',        # 9   (actual joint index: 31)
-    'wrist_roll_joint',        # 10  (actual joint index: 32)
-    'hand_l_proximal_joint',   # 11  (actual joint index: 37)
-    'hand_l_distal_joint',     # 12  (actual joint index: 40)
-    'hand_r_proximal_joint',   # 13  (actual joint index: 43)
-    'hand_r_distal_joint'      # 14  (actual joint index: 46)
+    'joint_x',                          # 0   (actual joint index: 0)
+    'joint_y',                          # 1   (actual joint index: 1)
+    'joint_rz',                         # 2   (actual joint index: 2)
+    'torso_lift_joint',                 # 3   (actual joint index: 17)
+    'head_pan_joint',                   # 4   (actual joint index: 18)
+    'head_tilt_joint',                  # 5   (actual joint index: 19)
+    'arm_lift_joint',                   # 6   (actual joint index: 28)
+    'arm_flex_joint',                   # 7   (actual joint index: 29)
+    'arm_roll_joint',                   # 8   (actual joint index: 30)
+    'wrist_flex_joint',                 # 9   (actual joint index: 31)
+    'wrist_roll_joint',                 # 10  (actual joint index: 32)
+    'hand_motor_joint',                 # 11  (actual joint index: 36)
+    'hand_l_proximal_joint',            # 12  (actual joint index: 37)
+    'hand_l_spring_proximal_joint',     # 13  (actual joint index: 38)
+    'hand_l_distal_joint',              # 14  (actual joint index: 40)
+    'hand_r_proximal_joint',            # 15  (actual joint index: 43)
+    'hand_r_spring_proximal_joint',     # 16  (actual joint index: 44)
+    'hand_r_distal_joint'               # 17  (actual joint index: 46)
     ]
 
 
@@ -185,10 +188,13 @@ class JointName(Enum):
     arm_roll_joint = all_joint_names[8]
     wrist_flex_joint = all_joint_names[9]
     wrist_roll_joint = all_joint_names[10]
-    hand_l_proximal_joint = all_joint_names[11]
-    hand_l_distal_joint = all_joint_names[12]
-    hand_r_proximal_joint = all_joint_names[13]
-    hand_r_distal_joint = all_joint_names[14]
+    hand_motor_joint = all_joint_names[11]
+    hand_l_proximal_joint = all_joint_names[12]
+    hand_l_spring_proximal_joint = all_joint_names[13]
+    hand_l_distal_joint = all_joint_names[14]
+    hand_r_proximal_joint = all_joint_names[15]
+    hand_r_spring_proximal_joint = all_joint_names[16]
+    hand_r_distal_joint = all_joint_names[17]
 
 class HsrPybulletEnv(gym.Env):
     def __init__(self) -> None:
@@ -249,13 +255,13 @@ class HsrPybulletEnv(gym.Env):
         self.robot_body_unique_id.torque_control = torque_control
 
         self.num_joints = self.robot_body_unique_id.num_joints   # 50
-        self.num_dofs = self.robot_body_unique_id.num_dofs       # 15
+        self.num_dofs = self.robot_body_unique_id.num_dofs       # 18
 
         self.free_joint_indices = self.robot_body_unique_id.free_joint_indices
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
         self.joint_max_velocities, self.joint_max_forces = self.get_joint_max_velocities_and_forces()
 
-        self.observation_space_length = 24  # 15 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
+        self.observation_space_length = 27  # 18 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
         self.observation_space = self.construct_observation_space()
         self.action_space = self.construct_action_space()
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
@@ -529,9 +535,9 @@ class HsrPybulletEnv(gym.Env):
         assert obs.shape[0] == self.observation_space_length, f"convert_observation_numpy_to_dict() expects an array of shape ({self.observation_space_length},)"
 
         d = deepcopy(observation_template)
-        d["joint_values"] = obs[:15]   # 15 comes from number of joint values and is equal to self.num_dofs
-        d["base_velocity"] = obs[15:17]
-        d["object_pose"] = {"position_xyz": obs[17:20], "quaternion_xyzw": obs[20:]}
+        d["joint_values"] = obs[:self.num_dofs]
+        d["base_velocity"] = obs[self.num_dofs:self.num_dofs+2]
+        d["object_pose"] = {"position_xyz": obs[self.num_dofs+2:self.num_dofs+5], "quaternion_xyzw": obs[self.num_dofs+5:]}
 
         if verbose:
             print("Conversion from observation numpy array to dictionary:")
@@ -545,7 +551,7 @@ class HsrPybulletEnv(gym.Env):
 
     def construct_action_space(self, verbose=False):
         """
-        Action space will have a total of 15 elements (same as the number of degrees of freedom i.e. self.num_dofs)
+        Action space will have a total of 18 elements (same as the number of degrees of freedom i.e. self.num_dofs)
 
         If normalized_action_space is True, joint values are normalized to [-1, 1]
         """
@@ -567,8 +573,8 @@ class HsrPybulletEnv(gym.Env):
 
     def construct_observation_space(self, verbose=False):
         """
-        Observation space will have a total of 24 elements (see observation_template):
-        - 15 joint values
+        Observation space will have a total of 27 elements (see observation_template):
+        - 18 joint values
         - 2 base velocity X and Y components
         - 3 object position XYZ
         - 4 object orientation (quaternion XYZW)
@@ -1338,7 +1344,7 @@ if __name__ == "__main__":
 
     # "DRY RUN"
     # obs = env.reset()
-    # home_joint_values = obs[:15]
+    # home_joint_values = obs[:env.num_dofs]
     # n_steps = 10
     # env.start_episode()  # without this, episode start time cannot be known/recorded
     # for i in range(n_steps):
@@ -1356,7 +1362,7 @@ if __name__ == "__main__":
     os.makedirs(log_dir, exist_ok=True)
     env = Monitor(env, log_dir)
     callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir)
-    model = PPO('MlpPolicy', env, verbose=1)
+    model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=log_dir)
 
     def on_exit():
         try:

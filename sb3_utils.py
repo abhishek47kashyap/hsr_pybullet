@@ -38,6 +38,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
           if len(x) > 0:
               # Mean training reward over the last 100 episodes
               mean_reward = np.mean(y[-100:])
+              self.logger.record("mean_reward", mean_reward)  # TensorBoard logging
               if self.verbose > 0:
                 print(f"Num timesteps: {self.num_timesteps}")
                 print(f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}")
