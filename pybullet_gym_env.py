@@ -268,7 +268,7 @@ class HsrPybulletEnv(gym.Env):
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
         # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
-        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(2.0, -1.0, 0), verbose=True)
+        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(4.0, -6.0, 0), verbose=True)
 
         self.camera_thread = threading.Thread(target=self.spin)
         self.keep_alive_camera_thread = True
@@ -333,15 +333,17 @@ class HsrPybulletEnv(gym.Env):
         """
         info = {}
 
-        # before applying action, scale it back up if action space is normalized
-        if self.normalized_action_and_observation_spaces:
-            if verbose:
-                print("Scaling normalized joint value from [-1, 1] to joint limits:")
-            for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
-                normalized_value = deepcopy(action[i])
-                action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))   # (-1.0, 1.0) comes from self.construct_action_space()
-                if verbose:
-                    print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
+        # if action will take any joint value outside its limit, clamp it
+        current_joint_values = self.get_joint_values()
+        for i, (current_val, lower_lim, upper_lim, delta) in enumerate(zip(current_joint_values, self.joint_limits_lower, self.joint_limits_upper, action)):
+            if i < 3:  # only apply action to joint_x, joint_y, joint_rz
+                new_joint_val = delta + current_val
+                action[i] = np.clip(new_joint_val, lower_lim, upper_lim)
+                if verbose and (np.abs(action[i] - new_joint_val) > 0.00001):
+                    print(f"\tJoint {all_joint_names[i]} got its value {new_joint_val:.5f} clipped to {action[i]:.5f} to make it fall between [{lower_lim}, {upper_lim}]")
+            else:
+                action[i] = current_joint_values[i]
+
 
         self.collision_monitoring_activation(activate=True)
         self.set_joint_position(action, verbose=verbose)
@@ -554,18 +556,13 @@ class HsrPybulletEnv(gym.Env):
         """
         Action space will have a total of 18 elements (same as the number of degrees of freedom i.e. self.num_dofs)
 
-        If normalized_action_space is True, joint values are normalized to [-1, 1]
+        Every element of an action represents how much to change joint value by i.e. delta change in joint value.
+        Allowed changes will be between [-1, 1].
         """
-        if self.normalized_action_and_observation_spaces:
-            action_space = spaces.Box(
-                np.ones(self.num_dofs, dtype=np.float32) * -1.0,
-                np.ones(self.num_dofs, dtype=np.float32)
-            )
-        else:
-            action_space = spaces.Box(
-                np.array(self.joint_limits_lower).astype(np.float32),
-                np.array(self.joint_limits_upper).astype(np.float32),
-            )
+        action_space = spaces.Box(
+            np.ones(self.num_dofs, dtype=np.float32) * -1.0,
+            np.ones(self.num_dofs, dtype=np.float32)
+        )
 
         if verbose:
             print(f"{Color.Cyan.value}Action space{Color.Color_Off.value} (type: {type(action_space)})\n{action_space}")
