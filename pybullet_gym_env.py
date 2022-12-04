@@ -27,6 +27,7 @@ import os
 import sys
 import threading
 import atexit
+import datetime, pytz
 
 import trimesh
 
@@ -338,7 +339,7 @@ class HsrPybulletEnv(gym.Env):
                 print("Scaling normalized joint value from [-1, 1] to joint limits:")
             for i in range(self.num_dofs):   # TODO: vectorize solution from https://stackoverflow.com/a/36000844/6010333
                 normalized_value = deepcopy(action[i])
-                action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))
+                action[i] = np.interp(action[i], (-1.0, 1.0), (self.joint_limits_lower[i], self.joint_limits_upper[i]))   # (-1.0, 1.0) comes from self.construct_action_space()
                 if verbose:
                     print(f"\t{all_joint_names[i]}: {normalized_value:.4f} --> {action[i]:.4f}")
 
@@ -1357,7 +1358,7 @@ if __name__ == "__main__":
     #         obs = env.reset()
 
     # RL
-    saved_model_name = "ppo_approaching_object"
+    saved_model_name = "ppo_approaching_object_" + str(datetime.datetime.now(pytz.timezone("Japan")))
     log_dir = "/root/HSR/hsr_pybullet/sb3_logs/"
     os.makedirs(log_dir, exist_ok=True)
     env = Monitor(env, log_dir)
@@ -1402,6 +1403,10 @@ if __name__ == "__main__":
 
     # del model
 
+    # saved_model_name = ""   # populate this
+    # if not file_exists(saved_model_name):
+    #     print(f"{Color.Red.value}No saved model found by the name \'{saved_model_name}\'{Color.Color_Off.value}")
+    #     sys.exit()
     # model = PPO.load(saved_model_name, print_system_info=True)
 
     # obs = env.reset()
