@@ -11,6 +11,10 @@ Ref:
     - Part 1: https://www.etedal.net/2020/04/pybullet-panda.html
     - Part 2: https://www.etedal.net/2020/04/pybullet-panda_2.html
     - Part 3: https://www.etedal.net/2020/04/pybullet-panda_3.html
+
+To create vectorized environment:
+- https://stable-baselines3.readthedocs.io/en/v0.11.1/guide/vec_envs.html
+- https://github.com/DLR-RM/stable-baselines3/issues/1089#issuecomment-1265338652
 """
 
 import gym
