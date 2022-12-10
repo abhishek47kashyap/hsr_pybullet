@@ -28,6 +28,7 @@ import sys
 import threading
 import atexit
 import datetime, pytz
+from collections.abc import Iterable
 
 import trimesh
 
@@ -207,7 +208,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.object_model_name = "002_master_chef_can"
         torque_control = True
-        gui = False
+        gui = True
         hand = True
 
         self.done = False
@@ -257,6 +258,7 @@ class HsrPybulletEnv(gym.Env):
 
         self.num_joints = self.robot_body_unique_id.num_joints   # 50
         self.num_dofs = self.robot_body_unique_id.num_dofs       # 18
+        self.num_dofs_actuated = 3   # only the first 3 joints [joint_x, joint_y, joint_rz]
 
         self.free_joint_indices = self.robot_body_unique_id.free_joint_indices
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
@@ -268,7 +270,7 @@ class HsrPybulletEnv(gym.Env):
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
         # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
-        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(4.0, -6.0, 0), verbose=True)
+        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(4.0, 6.0, 0), verbose=True)
 
         self.camera_thread = threading.Thread(target=self.spin)
         self.keep_alive_camera_thread = True
@@ -334,15 +336,15 @@ class HsrPybulletEnv(gym.Env):
         info = {}
 
         # if action will take any joint value outside its limit, clamp it
+        if len(action) != self.num_dofs_actuated:
+            print(f"{Color.Red.value}step() got an action with {len(action)} elements but should have {self.num_dofs_actuated} elements")
         current_joint_values = self.get_joint_values()
-        for i, (current_val, lower_lim, upper_lim, delta) in enumerate(zip(current_joint_values, self.joint_limits_lower, self.joint_limits_upper, action)):
-            if i < 3:  # only apply action to joint_x, joint_y, joint_rz
-                new_joint_val = delta + current_val
-                action[i] = np.clip(new_joint_val, lower_lim, upper_lim)
-                if verbose and (np.abs(action[i] - new_joint_val) > 0.00001):
-                    print(f"\tJoint {all_joint_names[i]} got its value {new_joint_val:.5f} clipped to {action[i]:.5f} to make it fall between [{lower_lim}, {upper_lim}]")
-            else:
-                action[i] = current_joint_values[i]
+        for i, (current_val, lower_lim, upper_lim, delta) in enumerate(zip(current_joint_values[:self.num_dofs_actuated], self.joint_limits_lower[:self.num_dofs_actuated], self.joint_limits_upper[:self.num_dofs_actuated], action)):
+            new_joint_val = delta + current_val
+            action[i] = np.clip(new_joint_val, lower_lim, upper_lim)
+            if verbose and (np.abs(action[i] - new_joint_val) > 0.00001):
+                print(f"\tJoint {all_joint_names[i]} got its value {new_joint_val:.5f} clipped to {action[i]:.5f} to make it fall between [{lower_lim}, {upper_lim}]")
+        action = np.append(action, current_joint_values[self.num_dofs_actuated:])
 
 
         self.collision_monitoring_activation(activate=True)
@@ -560,8 +562,8 @@ class HsrPybulletEnv(gym.Env):
         Allowed changes will be between [-1, 1].
         """
         action_space = spaces.Box(
-            np.ones(self.num_dofs, dtype=np.float32) * -1.0,
-            np.ones(self.num_dofs, dtype=np.float32)
+            np.ones(self.num_dofs_actuated, dtype=np.float32) * -1.0,
+            np.ones(self.num_dofs_actuated, dtype=np.float32)
         )
 
         if verbose:
@@ -778,7 +780,8 @@ class HsrPybulletEnv(gym.Env):
 
         self.robot_body_unique_id.reset()
 
-        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
+        # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
+        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(4.0, 6.0, 0))
 
         self.done = False
         self.previous_proximity_to_object = self.calculate_base_proximity_to_object(verbose=verbose)
@@ -1359,8 +1362,8 @@ if __name__ == "__main__":
     log_dir = "/root/HSR/hsr_pybullet/sb3_logs/"
     os.makedirs(log_dir, exist_ok=True)
     env = Monitor(env, log_dir)
-    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir)
-    model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=log_dir)
+    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir, model_name=saved_model_name)
+    model = PPO('MlpPolicy', env, verbose=1)
 
     def on_exit():
         try:
@@ -1383,8 +1386,9 @@ if __name__ == "__main__":
     print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
     env.time_of_big_bang = time.time()
     env.training_mode = True
-    timesteps = 1e5
-    model.learn(total_timesteps=int(timesteps), callback=callback)
+    timesteps = 2e4   # ends up being 20,480 timesteps (probably related to https://github.com/DLR-RM/stable-baselines3/issues/1150)
+    model.learn(total_timesteps=int(timesteps), callback=callback, progress_bar=True)
+    print(f"Saving model to {saved_model_name}")
     model.save(saved_model_name)
     print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
     env.training_mode = False
