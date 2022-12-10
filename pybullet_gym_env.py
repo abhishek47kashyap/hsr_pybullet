@@ -270,7 +270,8 @@ class HsrPybulletEnv(gym.Env):
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
         # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
-        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(4.0, 6.0, 0), verbose=True)
+        self.added_obj_position = (4.0, 6.0, 0)
+        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position, verbose=True)
 
         self.camera_thread = threading.Thread(target=self.spin)
         self.keep_alive_camera_thread = True
@@ -343,7 +344,7 @@ class HsrPybulletEnv(gym.Env):
             new_joint_val = delta + current_val
             action[i] = np.clip(new_joint_val, lower_lim, upper_lim)
             if verbose and (np.abs(action[i] - new_joint_val) > 0.00001):
-                print(f"\tJoint {all_joint_names[i]} got its value {new_joint_val:.5f} clipped to {action[i]:.5f} to make it fall between [{lower_lim}, {upper_lim}]")
+                print(f"\t{all_joint_names[i]}: delta = {delta:.4f}, joint value: current = {current_val:.4f}, new = {new_joint_val:.4f}, clipped = {action[i]:.4f}")
         action = np.append(action, current_joint_values[self.num_dofs_actuated:])
 
 
@@ -781,7 +782,7 @@ class HsrPybulletEnv(gym.Env):
         self.robot_body_unique_id.reset()
 
         # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
-        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=(4.0, 6.0, 0))
+        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position)
 
         self.done = False
         self.previous_proximity_to_object = self.calculate_base_proximity_to_object(verbose=verbose)
