@@ -37,6 +37,48 @@ all_joint_names = [  # order is important
     'hand_r_distal_joint'
     ]
 
+all_joint_indices = [
+    0, # 'joint_x'
+    1, # 'joint_y'
+    2, # 'joint_rz'
+    17, # 'torso_lift_joint'
+    18, # 'head_pan_joint'
+    19, # 'head_tilt_joint'
+    28, # 'arm_lift_joint'
+    29, # 'arm_flex_joint'
+    30, # 'arm_roll_joint'
+    31, # 'wrist_flex_joint'
+    32, # 'wrist_roll_joint'
+    36, # 'hand_motor_joint'
+    37, # 'hand_l_proximal_joint'
+    38, # 'hand_l_spring_proximal_joint'
+    40, # 'hand_l_distal_joint'
+    43, # 'hand_r_proximal_joint'
+    44, # 'hand_r_spring_proximal_joint'
+    46, # 'hand_r_distal_joint'
+]
+
+map_joint_indices = {  # maps joint index as obtained from print_joint_info() to index in all_joint_names
+    0: 0,
+    1: 1,
+    2: 2,
+    17: 3,
+    18: 4,
+    19: 5,
+    28: 6,
+    29: 7,
+    30: 8,
+    31: 9,
+    32: 10,
+    36: 11,
+    37: 12,
+    38: 13,
+    40: 14,
+    43: 15,
+    44: 16,
+    46: 17
+}
+
 class JointName(Enum):
     joint_x = all_joint_names[0]
     joint_y = all_joint_names[1]
@@ -205,9 +247,75 @@ def get_object_dimensions(obj_mesh):
     z = vs[:,2]
     return [max(dirn)-min(dirn) for dirn in [x, y, z]]
 
+def set_joint_position(pybullet_client, robot_body_unique_id, joint_positions, target_velocities, logged_once: bool, action_name=None, set_joint_motor_control_array: bool = True):
+    """
+        setJointMotorControlArray_args = {
+            "bodyUniqueId": robot_body_unique_id.id,
+            "jointIndices": robot_body_unique_id.free_joint_indices,
+            "controlMode": p.POSITION_CONTROL,
+            "targetVelocities": target_velocities
+        }
+    """
+
+    if len(joint_positions) != len(all_joint_indices):
+        print(f"ERROR: joint positions have {len(joint_positions)} elements but there are {len(all_joint_indices)} joint indices (dof)")
+    
+    all_joints_max_velocities = robot_body_unique_id.get_joint_infos()['joint_max_velocity']
+    all_joints_max_torques = robot_body_unique_id.get_joint_infos()['joint_max_force']
+    current_joint_values = get_all_joint_values(robot_body_unique_id)
+
+    if action_name and not logged_once:
+        print(f"Setting joint values to {action_name}..")
+
+    if set_joint_motor_control_array:
+        setJointMotorControlArray_args = {
+                "bodyUniqueId": robot_body_unique_id.id,
+                "jointIndices": robot_body_unique_id.free_joint_indices,
+                "controlMode": p.POSITION_CONTROL,
+                "targetVelocities": target_velocities
+            }
+        pybullet_client.setJointMotorControlArray(
+                    targetPositions=joint_positions,
+                    **setJointMotorControlArray_args
+                )
+    else:
+        joint_indices_that_overshoot = [0, 1, 2]  # joint_x, joint_y, joint_rz
+        time = np.max([abs(joint_positions[i] - current_joint_values[i]) / all_joints_max_velocities[i] for i in joint_indices_that_overshoot])
+        print(f"TIME = {time}s")
+        
+        for joint_idx, joint_pos, current_joint_pos, joint_target_vel, joint_max_vel, joint_torque in zip(all_joint_indices, joint_positions, current_joint_values, target_velocities, all_joints_max_velocities, all_joints_max_torques):
+            print(f"joint name {all_joint_names[map_joint_indices[joint_idx]]}, target position: {joint_pos}, target veloctity: {joint_target_vel}, max velocity: {joint_max_vel}")
+            if joint_idx in joint_indices_that_overshoot and time > 0:
+                pybullet_client.setJointMotorControl2(
+                    bodyIndex=robot_body_unique_id.id,
+                    jointIndex=joint_idx,
+                    controlMode=p.POSITION_CONTROL,
+                    targetPosition=joint_pos,
+                    targetVelocity=joint_target_vel, # joint_max_vel,
+                    # positionGain=0.028,
+                    # maxVelocity=joint_max_vel,   # if uncommented, base moves very slowly
+                    # velocityGain=0.001,   # has little/no effect on overshoot
+                    force=joint_torque,
+                    physicsClientId=pybullet_client._client
+                    )
+            else:
+                pybullet_client.setJointMotorControl2(
+                    bodyIndex=robot_body_unique_id.id,
+                    jointIndex=joint_idx,
+                    controlMode=p.POSITION_CONTROL,
+                    targetPosition=joint_pos,
+                    targetVelocity=joint_max_vel,
+                    # maxVelocity=joint_max_vel,   # if uncommented, base moves very slowly
+                    force=joint_torque,
+                    physicsClientId=pybullet_client._client
+                    )
+    
+    if action_name and not logged_once:
+        print(f"Completed {action_name}")
+
 def main():
     urdf_file_path = "hsrb_description/robots/hsrb.urdf"
-    use_fixed_base = True
+    use_fixed_base = True   # else robot goes Wingardium Leviosa
     connection_mode = p.GUI
 
     camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
@@ -261,9 +369,10 @@ def main():
         collisionFramePosition=-centroid,
     )
 
+    object_position_x = 4.0
     obj_id = bullet_client.createMultiBody(
         baseMass=mesh.mass,
-        basePosition=(1.0, 0, 0),
+        basePosition=(object_position_x, 0, 0),
         baseOrientation=(0, 0, 0, 1),
         baseCollisionShapeIndex=collision_shape_id,
         baseVisualShapeIndex=visual_shape_id,
@@ -285,9 +394,9 @@ def main():
     current_joint_values = get_all_joint_values(robot_body_unique_id)
 
     pre_grasp = deepcopy(current_joint_values)
-    pre_grasp[all_joint_names.index(JointName.joint_x.value)] = 0.52
+    pre_grasp[all_joint_names.index(JointName.joint_x.value)] = object_position_x - 0.48
     pre_grasp[all_joint_names.index(JointName.joint_y.value)] = -0.088
-    pre_grasp[all_joint_names.index(JointName.arm_lift_joint.value)] = 0.1
+    pre_grasp[all_joint_names.index(JointName.arm_lift_joint.value)] = 0.11
     pre_grasp[all_joint_names.index(JointName.arm_flex_joint.value)] = -np.pi/2.0
     pre_grasp[all_joint_names.index(JointName.wrist_flex_joint.value)] = -np.pi/2.0
     pre_grasp[all_joint_names.index(JointName.hand_motor_joint.value)] = open_gripper_joint_values[JointName.hand_motor_joint.value]
@@ -348,22 +457,30 @@ def main():
         
         if current_state == 0:
             if state_log[current_state] == False:
-                print("Pre-grasp")
                 state_log[current_state] = True
-
-            bullet_client.setJointMotorControlArray(
-                targetPositions=pre_grasp,
-                **setJointMotorControlArray_args
-            )
+                set_joint_position(
+                        pybullet_client = bullet_client,
+                        robot_body_unique_id = robot_body_unique_id,
+                        joint_positions = pre_grasp,
+                        target_velocities = target_velocities,
+                        logged_once = state_log[current_state],
+                        action_name = "pre-grasp",
+                        set_joint_motor_control_array = True
+                    )
+            
         elif current_state == 1:
             if state_log[current_state] == False:
-                print("Grasp")
                 state_log[current_state] = True
+                set_joint_position(
+                        pybullet_client = bullet_client,
+                        robot_body_unique_id = robot_body_unique_id,
+                        joint_positions = grasp,
+                        target_velocities = target_velocities,
+                        logged_once = state_log[current_state],
+                        action_name = "grasp",
+                        set_joint_motor_control_array = True
+                    )
 
-            bullet_client.setJointMotorControlArray(
-                targetPositions=grasp,
-                **setJointMotorControlArray_args
-            )
         elif current_state == 2:
             if state_log[current_state] == False:
                 print("Closing gripper")
@@ -380,13 +497,13 @@ def main():
                 targetPositions=lift_up,
                 **setJointMotorControlArray_args
             )
-        
+
         if state_t > state_durations[current_state]:
             current_state += 1
             if current_state >= len(state_durations):
                 break
                 # current_state = 0
-                # state_log = [False for i in range(len(state_durations))]
+                # state_log = [False] * len(state_durations)
             state_t = 0
 
         bullet_client.stepSimulation()
