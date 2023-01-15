@@ -105,7 +105,6 @@ def main():
                             for name, lower, upper in zip(joint_names, joint_lower_limits, joint_upper_limits)]
 
     while True:
-        bullet_client.stepSimulation()
         joint_values_from_sliders = [bullet_client.readUserDebugParameter(itemUniqueId=id, physicsClientId=bullet_client._client) for id in debug_param_ids]
 
         set_joint_positions(
@@ -116,6 +115,7 @@ def main():
             set_joint_motor_control_array=True
         )
 
+        bullet_client.stepSimulation()
 
 if __name__ == "__main__":
     main()
