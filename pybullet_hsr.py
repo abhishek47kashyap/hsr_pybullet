@@ -25,6 +25,48 @@ def get_joint_limits(robot_body_unique_id, verbose=False):
 
     return joint_names, joint_lower_limits, joint_upper_limits
 
+def set_joint_positions(bullet_client, robot_body_unique_id, joint_positions, joint_velocities, set_joint_motor_control_array: bool = True):
+    if set_joint_motor_control_array:
+        bullet_client.setJointMotorControlArray(
+            targetPositions=joint_positions,
+            bodyUniqueId=robot_body_unique_id.id,
+            jointIndices=robot_body_unique_id.free_joint_indices,
+            controlMode=p.POSITION_CONTROL,
+            targetVelocities=joint_velocities
+        )
+
+    else:
+        joint_infos = robot_body_unique_id.get_joint_infos()
+        all_joints_max_velocities = joint_infos['joint_max_velocity']
+        all_joints_max_torques = joint_infos['joint_max_force']
+        joint_indices_that_overshoot = [0, 1]  # joint_x, joint_y
+
+        for joint_idx, joint_pos, joint_target_vel, joint_max_vel, joint_torque in zip(robot_body_unique_id.free_joint_indices, joint_positions, joint_velocities, all_joints_max_velocities, all_joints_max_torques):
+            if joint_idx in joint_indices_that_overshoot:
+                bullet_client.setJointMotorControl2(
+                    bodyIndex=robot_body_unique_id.id,
+                    jointIndex=joint_idx,
+                    controlMode=p.POSITION_CONTROL,
+                    targetPosition=joint_pos,
+                    targetVelocity=joint_target_vel, # joint_max_vel,
+                    positionGain=0.028,
+                    # maxVelocity=joint_max_vel,   # if uncommented, base moves very slowly
+                    # velocityGain=0.001,   # has little/no effect on overshoot
+                    force=joint_torque,
+                    physicsClientId=bullet_client._client
+                    )
+            else:
+                bullet_client.setJointMotorControl2(
+                    bodyIndex=robot_body_unique_id.id,
+                    jointIndex=joint_idx,
+                    controlMode=p.POSITION_CONTROL,
+                    targetPosition=joint_pos,
+                    targetVelocity=joint_max_vel,
+                    # maxVelocity=joint_max_vel,   # if uncommented, base moves very slowly
+                    force=joint_torque,
+                    physicsClientId=bullet_client._client
+                    )
+
 def main():
     urdf_file_path = "hsrb_description/robots/hsrb.urdf"
     use_fixed_base = True
@@ -66,9 +108,12 @@ def main():
         bullet_client.stepSimulation()
         joint_values_from_sliders = [bullet_client.readUserDebugParameter(itemUniqueId=id, physicsClientId=bullet_client._client) for id in debug_param_ids]
 
-        bullet_client.setJointMotorControlArray(
-            targetPositions=joint_values_from_sliders,
-            **setJointMotorControlArray_args
+        set_joint_positions(
+            bullet_client = bullet_client,
+            robot_body_unique_id = robot_body_unique_id,
+            joint_positions = joint_values_from_sliders,
+            joint_velocities = np.zeros(n_dofs),
+            set_joint_motor_control_array=True
         )
 
 
