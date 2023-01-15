@@ -582,8 +582,7 @@ POSSIBILITY OF SUCH DAMAGE.
     <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.752"/>
     <!-- <origin xyz="0.0 0.0 0.752" rpy="0.0 0.0 0.0" /> -->
     <axis xyz="0.0 0.0 1.0"/>
-    <!--<limit effort="300.0" lower="0.0" upper="0.345" velocity="0.1"/>-->
-    <limit effort="1000.0" lower="0.0" upper="0.345" velocity="0.1"/>
+    <limit effort="300.0" lower="0.0" upper="0.345" velocity="0.1"/>
     <parent link="base_link"/>
     <child link="torso_lift_link"/>
     <mimic joint="arm_lift_joint" multiplier="0.5"/>
@@ -1327,11 +1326,10 @@ POSSIBILITY OF SUCH DAMAGE.
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
   </link>
-
   <joint name="hand_l_proximal_joint" type="revolute">
     <origin rpy="0.0 0.0 0.0" xyz="-0.01675 -0.0245 -0.0175"/>
     <axis xyz="1.0 0.0 0.0"/>
-    <limit effort="1.0" lower="-0.798" upper="1.24" velocity="5.0"/>
+    <limit effort="100.0" lower="-0.798" upper="1.24" velocity="1.0"/>
     <parent link="hand_palm_link"/>
     <child link="hand_l_proximal_link"/>
     <mimic joint="hand_motor_joint"/>
@@ -1342,11 +1340,10 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_l_spring_proximal_joint" type="revolute">
     <axis xyz="1.0 0.0 0.0"/>
-    <limit effort="1.0" lower="0.0" upper="0.698" velocity="1.0"/>
+    <limit effort="10.0" lower="0.0" upper="0.698" velocity="1.0"/>
     <parent link="hand_l_proximal_link"/>
     <child link="hand_l_spring_proximal_link"/>
     <dynamics damping="0.0001"/>
@@ -1363,14 +1360,12 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </visual>
     <collision>
-      <origin rpy="1.57079632679 0.0 0.0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="package://hsrb_meshes/meshes/hand_v0/l_proximal_collision.obj"/>
+        <mesh filename="package://hsrb_meshes/meshes/hand_v0/l_proximal.stl"/>
       </geometry>
     </collision>
-    <dynamics friction="100" damping="100" />
   </link>
-  <joint name="hand_l_mimic_distal_joint" type="fixed">
+  <joint name="hand_l_mimic_distal_joint" type="revolute">
     <origin xyz="0.0 0.0 0.07"/>
     <axis xyz="1.0 0.0 0.0"/>
     <limit effort="100.0" lower="-0.698" upper="-0.0" velocity="1.0"/>
@@ -1384,11 +1379,10 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_l_distal_joint" type="revolute">
     <axis xyz="1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-1.24" upper="0.798" velocity="5.0"/>
+    <limit effort="100.0" lower="-1.24" upper="0.798" velocity="1.0"/>
     <parent link="hand_l_mimic_distal_link"/>
     <child link="hand_l_distal_link"/>
     <mimic joint="hand_motor_joint" multiplier="-1.0" offset="-0.087"/>
@@ -1406,17 +1400,10 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </visual>
     <collision>
-      <origin rpy="1.57079632679 0.0 0.0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="package://hsrb_meshes/meshes/hand_v0/l_distal_collision.obj"/>
+        <mesh filename="package://hsrb_meshes/meshes/hand_v0/l_distal.stl"/>
       </geometry>
     </collision>
-    <dynamics friction="100" damping="100" />
-    <contact>
-      <lateral_friction value="2"/>
-      <rolling_friction value="0.1"/>
-      <spinning_friction value="0"/>
-    </contact>
   </link>
   <joint name="hand_l_finger_tip_frame_joint" type="fixed">
     <origin rpy="-1.57079632679 0.0 0.0" xyz="0.01675 0.01865 0.04289"/>
@@ -1429,7 +1416,6 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_l_finger_vacuum_frame_joint" type="fixed">
     <origin rpy="0.785398163397 0.0 0.0" xyz="0.00475 -0.011539 0.03322"/>
@@ -1448,12 +1434,11 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
       <material name="body_sub"/>
     </visual>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_r_proximal_joint" type="revolute">
     <origin rpy="0.0 0.0 0.0" xyz="-0.01675 0.0245 -0.0175"/>
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="1.0" lower="-0.798" upper="1.24" velocity="5.0"/>
+    <limit effort="100.0" lower="-0.798" upper="1.24" velocity="1.0"/>
     <parent link="hand_palm_link"/>
     <child link="hand_r_proximal_link"/>
     <mimic joint="hand_motor_joint"/>
@@ -1464,11 +1449,10 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_r_spring_proximal_joint" type="revolute">
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="1.0" lower="0.0" upper="0.698" velocity="1.0"/>
+    <limit effort="10.0" lower="0.0" upper="0.698" velocity="1.0"/>
     <parent link="hand_r_proximal_link"/>
     <child link="hand_r_spring_proximal_link"/>
     <dynamics damping="0.0001"/>
@@ -1485,17 +1469,15 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </visual>
     <collision>
-      <origin rpy="1.57079632679 0.0 0.0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="package://hsrb_meshes/meshes/hand_v0/r_proximal_collision.obj"/>
+        <mesh filename="package://hsrb_meshes/meshes/hand_v0/r_proximal.stl"/>
       </geometry>
     </collision>
-    <dynamics friction="100" damping="100" />
   </link>
-  <joint name="hand_r_mimic_distal_joint" type="fixed">
+  <joint name="hand_r_mimic_distal_joint" type="revolute">
     <origin xyz="0.0 0.0 0.07"/>
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-0.698" upper="-0.0" velocity="5.0"/>
+    <limit effort="100.0" lower="-0.698" upper="-0.0" velocity="1.0"/>
     <parent link="hand_r_spring_proximal_link"/>
     <child link="hand_r_mimic_distal_link"/>
     <mimic joint="hand_r_spring_proximal_joint" multiplier="-1.0"/>
@@ -1506,11 +1488,10 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_r_distal_joint" type="revolute">
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-1.24" upper="0.798" velocity="5.0"/>
+    <limit effort="100.0" lower="-1.24" upper="0.798" velocity="1.0"/>
     <parent link="hand_r_mimic_distal_link"/>
     <child link="hand_r_distal_link"/>
     <mimic joint="hand_motor_joint" multiplier="-1.0" offset="-0.087"/>
@@ -1528,17 +1509,10 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </visual>
     <collision>
-      <origin rpy="1.57079632679 0.0 0.0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="package://hsrb_meshes/meshes/hand_v0/r_distal_collision.obj"/>
+        <mesh filename="package://hsrb_meshes/meshes/hand_v0/r_distal.stl"/>
       </geometry>
     </collision>
-    <contact>
-      <lateral_friction value="2"/>
-      <rolling_friction value="0.1"/>
-      <spinning_friction value="0"/>
-    </contact>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_r_finger_tip_frame_joint" type="fixed">
     <origin rpy="1.57079632679 0.0 0.0" xyz="0.01675 -0.01865 0.04289"/>
@@ -1550,7 +1524,6 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_camera_frame_joint" type="fixed">
     <origin rpy="0.0 0.0 0.0" xyz="0.039 0.0 -0.0045"/>
@@ -1563,7 +1536,6 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <joint name="hand_camera_gazebo_frame_joint" type="fixed">
     <origin rpy="1.57079632679 -1.57079632679 0" xyz="0 0 0"/>
@@ -1576,7 +1548,6 @@ POSSIBILITY OF SUCH DAMAGE.
       <mass value="0.01"/>
       <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
     </inertial>
-    <dynamics friction="100" damping="100" />
   </link>
   <gazebo reference="hand_camera_gazebo_frame">
     <sensor name="hand_camera" type="camera">
@@ -1783,4 +1754,3 @@ POSSIBILITY OF SUCH DAMAGE.
     </plugin>
   </gazebo>
 </robot>
-
