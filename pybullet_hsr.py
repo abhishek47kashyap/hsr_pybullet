@@ -59,16 +59,8 @@ def main():
         "targetVelocities": np.zeros(n_dofs)
     }
 
-    debug_param_ids = []
-    for name, lower, upper in zip(joint_names, joint_lower_limits, joint_upper_limits):
-        debug_param_ids.append(bullet_client.addUserDebugParameter(
-            paramName=name,
-            rangeMin=lower,
-            rangeMax=upper,
-            startValue=0.0,
-            physicsClientId=bullet_client._client
-            )
-        )
+    debug_param_ids = [bullet_client.addUserDebugParameter(paramName=name, rangeMin=lower, rangeMax=upper, startValue=0.0, physicsClientId=bullet_client._client) 
+                            for name, lower, upper in zip(joint_names, joint_lower_limits, joint_upper_limits)]
 
     while True:
         bullet_client.stepSimulation()
