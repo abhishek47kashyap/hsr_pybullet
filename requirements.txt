@@ -6,3 +6,5 @@ trimesh==3.16.0
 gym==0.21.0
 stable_baselines3==1.6.2
 rl_zoo3==1.6.3
+
+columnar==1.4.1

@@ -12,16 +12,24 @@ import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
 
+from columnar import columnar as clm
+
 def get_joint_limits(robot_body_unique_id, verbose=False):
     joint_infos = robot_body_unique_id.get_joint_infos()
     joint_names = [x.decode('utf-8') for x in joint_infos["joint_name"]]
     joint_lower_limits = joint_infos["joint_lower_limit"]
     joint_upper_limits = joint_infos["joint_upper_limit"]
+    joint_types = joint_infos["joint_type"]
 
     if verbose:
-        print("Joint limits:")
-        for name, lower, upper in zip(joint_names, joint_lower_limits, joint_upper_limits):
-            print(f"\t{name}: [{lower}, {upper}]")
+        headers = [f"Name ({robot_body_unique_id.num_dofs})", "Lower", "Upper", "Type", "Type2"]
+        data = []
+        for name, lower, upper, joint_type in zip(joint_names, joint_lower_limits, joint_upper_limits, joint_types):
+            jtype_str = "prismatic" if joint_type == 1 else "revolute"
+            data.append([name, lower, upper, jtype_str, joint_type])
+
+        table = clm(data, headers, no_borders=True, justify=['l', 'c', 'c', 'l', 'c'])
+        print(table)
 
     return joint_names, joint_lower_limits, joint_upper_limits
 
