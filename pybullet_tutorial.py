@@ -16,6 +16,8 @@ import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
 
+from columnar import columnar as clm
+
 all_joint_names = [  # order is important
     'joint_x',
     'joint_y',
@@ -31,9 +33,11 @@ all_joint_names = [  # order is important
     'hand_motor_joint',
     'hand_l_proximal_joint',
     'hand_l_spring_proximal_joint',
+    'hand_l_mimic_distal_joint',
     'hand_l_distal_joint',
     'hand_r_proximal_joint',
     'hand_r_spring_proximal_joint',
+    'hand_r_mimic_distal_joint',
     'hand_r_distal_joint'
     ]
 
@@ -52,9 +56,11 @@ all_joint_indices = [
     36, # 'hand_motor_joint'
     37, # 'hand_l_proximal_joint'
     38, # 'hand_l_spring_proximal_joint'
+    39, # 'hand_l_mimic_distal_joint'
     40, # 'hand_l_distal_joint'
     43, # 'hand_r_proximal_joint'
     44, # 'hand_r_spring_proximal_joint'
+    45, # 'hand_r_mimic_distal_joint'
     46, # 'hand_r_distal_joint'
 ]
 
@@ -73,10 +79,12 @@ map_joint_indices = {  # maps joint index as obtained from print_joint_info() to
     36: 11,
     37: 12,
     38: 13,
-    40: 14,
-    43: 15,
-    44: 16,
-    46: 17
+    39: 14,
+    40: 15,
+    43: 16,
+    44: 17,
+    45: 18,
+    46: 19
 }
 
 class JointName(Enum):
@@ -94,10 +102,12 @@ class JointName(Enum):
     hand_motor_joint = all_joint_names[11]
     hand_l_proximal_joint = all_joint_names[12]
     hand_l_spring_proximal_joint = all_joint_names[13]
-    hand_l_distal_joint = all_joint_names[14]
-    hand_r_proximal_joint = all_joint_names[15]
-    hand_r_spring_proximal_joint = all_joint_names[16]
-    hand_r_distal_joint = all_joint_names[17]
+    hand_l_mimic_distal_joint = all_joint_names[14]
+    hand_l_distal_joint = all_joint_names[15]
+    hand_r_proximal_joint = all_joint_names[16]
+    hand_r_spring_proximal_joint = all_joint_names[17]
+    hand_r_mimic_distal_joint = all_joint_names[18]
+    hand_r_distal_joint = all_joint_names[19]
 
 open_gripper_joint_values = {
     JointName.hand_motor_joint.value: 1.24,              # joint 36
@@ -105,9 +115,9 @@ open_gripper_joint_values = {
     JointName.hand_r_spring_proximal_joint.value: 0.0,   # joint 44
 }
 close_gripper_joint_values = {
-    JointName.hand_motor_joint.value: -0.798,              # joint 36
-    JointName.hand_l_spring_proximal_joint.value: 0.698,   # joint 38
-    JointName.hand_r_spring_proximal_joint.value: 0.698,   # joint 44
+    JointName.hand_motor_joint.value: 0.0,              # joint 36
+    JointName.hand_l_spring_proximal_joint.value: 0.0,   # joint 38
+    JointName.hand_r_spring_proximal_joint.value: 0.0,   # joint 44
 }
 
 def close_gripper(robot_body_unique_id, bullet_client):
@@ -280,12 +290,13 @@ def set_joint_position(pybullet_client, robot_body_unique_id, joint_positions, t
                 )
     else:
         joint_indices_that_overshoot = [0, 1, 2]  # joint_x, joint_y, joint_rz
-        time = np.max([abs(joint_positions[i] - current_joint_values[i]) / all_joints_max_velocities[i] for i in joint_indices_that_overshoot])
-        print(f"TIME = {time}s")
+
+        headers = [f"Joint name ({robot_body_unique_id.num_dofs})", "Target position", "Target velocity", "Max. velocity"]
+        data = []
         
         for joint_idx, joint_pos, current_joint_pos, joint_target_vel, joint_max_vel, joint_torque in zip(all_joint_indices, joint_positions, current_joint_values, target_velocities, all_joints_max_velocities, all_joints_max_torques):
-            print(f"joint name {all_joint_names[map_joint_indices[joint_idx]]}, target position: {joint_pos:.6f}, target veloctity: {joint_target_vel}, max velocity: {joint_max_vel}")
-            if joint_idx in joint_indices_that_overshoot and time > 0:
+            data.append([all_joint_names[map_joint_indices[joint_idx]], round(joint_pos, 3), joint_target_vel, joint_max_vel])
+            if joint_idx in joint_indices_that_overshoot:
                 pybullet_client.setJointMotorControl2(
                     bodyIndex=robot_body_unique_id.id,
                     jointIndex=joint_idx,
@@ -305,10 +316,14 @@ def set_joint_position(pybullet_client, robot_body_unique_id, joint_positions, t
                     controlMode=p.POSITION_CONTROL,
                     targetPosition=joint_pos,
                     targetVelocity=joint_max_vel,
-                    # maxVelocity=joint_max_vel,   # if uncommented, base moves very slowly
+                    # positionGain=0.05,
+                    # maxVelocity=joint_max_vel,  # if uncommented, all joints move very slowly
                     force=joint_torque,
                     physicsClientId=pybullet_client._client
                     )
+        
+        table = clm(data, headers, no_borders=True, justify=['l', 'c', 'c', 'c'])
+        print(table)
     
     if action_name and not logged_once:
         print(f"\t Completed {action_name}")
@@ -317,6 +332,7 @@ def main():
     urdf_file_path = "hsrb_description/robots/hsrb.urdf"
     use_fixed_base = True   # else robot goes Wingardium Leviosa
     connection_mode = p.GUI
+    use_set_joint_motor_control_array = False
 
     camera_joint_frame = 'hand_camera_gazebo_frame_joint' if hand else 'head_rgbd_sensor_gazebo_frame_joint'
     camera_config = deepcopy(CAMERA_REALSENSE_CONFIG if hand else CAMERA_XTION_CONFIG)
@@ -414,7 +430,7 @@ def main():
     lift_up = deepcopy(close_gripper_jvalues)
     lift_up[all_joint_names.index(JointName.arm_lift_joint.value)] += 0.4
 
-    state_durations = [1, 1, 1, 1]
+    state_durations = [5, 5, 5, 5]
     state_log = [False for i in range(len(state_durations))]
     current_state = 0
     state_t = 0.0
@@ -457,7 +473,7 @@ def main():
                         target_velocities = target_velocities,
                         logged_once = state_log[current_state],
                         action_name = "pre-grasp",
-                        set_joint_motor_control_array = True
+                        set_joint_motor_control_array = use_set_joint_motor_control_array
                     )
                 state_log[current_state] = True
             
@@ -470,7 +486,7 @@ def main():
                         target_velocities = target_velocities,
                         logged_once = state_log[current_state],
                         action_name = "grasp",
-                        set_joint_motor_control_array = True
+                        set_joint_motor_control_array = use_set_joint_motor_control_array
                     )
                 state_log[current_state] = True
 
@@ -483,7 +499,7 @@ def main():
                         target_velocities = target_velocities,
                         logged_once = state_log[current_state],
                         action_name = "closing gripper",
-                        set_joint_motor_control_array = True
+                        set_joint_motor_control_array = use_set_joint_motor_control_array
                     )
                 state_log[current_state] = True
 
@@ -496,7 +512,7 @@ def main():
                         target_velocities = target_velocities,
                         logged_once = state_log[current_state],
                         action_name = "lifting up",
-                        set_joint_motor_control_array = True
+                        set_joint_motor_control_array = use_set_joint_motor_control_array
                     )
                 state_log[current_state] = True
 
