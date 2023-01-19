@@ -145,26 +145,6 @@ Joint information:
   Joint 48: b'hand_camera_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_camera_frame'
   Joint 49: b'hand_camera_gazebo_frame_joint', type: 4, limits: lower 0.0, upper: -1.0, link-name: b'hand_camera_gazebo_frame'
 """
-all_joint_names = [  # order is important
-    'joint_x',                          # 0   (actual joint index: 0)
-    'joint_y',                          # 1   (actual joint index: 1)
-    'joint_rz',                         # 2   (actual joint index: 2)
-    'torso_lift_joint',                 # 3   (actual joint index: 17)
-    'head_pan_joint',                   # 4   (actual joint index: 18)
-    'head_tilt_joint',                  # 5   (actual joint index: 19)
-    'arm_lift_joint',                   # 6   (actual joint index: 28)
-    'arm_flex_joint',                   # 7   (actual joint index: 29)
-    'arm_roll_joint',                   # 8   (actual joint index: 30)
-    'wrist_flex_joint',                 # 9   (actual joint index: 31)
-    'wrist_roll_joint',                 # 10  (actual joint index: 32)
-    'hand_motor_joint',                 # 11  (actual joint index: 36)
-    'hand_l_proximal_joint',            # 12  (actual joint index: 37)
-    'hand_l_spring_proximal_joint',     # 13  (actual joint index: 38)
-    'hand_l_distal_joint',              # 14  (actual joint index: 40)
-    'hand_r_proximal_joint',            # 15  (actual joint index: 43)
-    'hand_r_spring_proximal_joint',     # 16  (actual joint index: 44)
-    'hand_r_distal_joint'               # 17  (actual joint index: 46)
-    ]
 
 
 def file_exists(filepath: str) -> bool:
@@ -181,26 +161,6 @@ class Color(Enum):
     White = "\033[0;37m"
     Color_Off = "\033[0m"
 
-
-class JointName(Enum):
-    joint_x = all_joint_names[0]
-    joint_y = all_joint_names[1]
-    joint_rz = all_joint_names[2]
-    torso_lift_joint = all_joint_names[3]
-    head_pan_joint = all_joint_names[4]
-    head_tilt_joint = all_joint_names[5]
-    arm_lift_joint = all_joint_names[6]
-    arm_flex_joint = all_joint_names[7]
-    arm_roll_joint = all_joint_names[8]
-    wrist_flex_joint = all_joint_names[9]
-    wrist_roll_joint = all_joint_names[10]
-    hand_motor_joint = all_joint_names[11]
-    hand_l_proximal_joint = all_joint_names[12]
-    hand_l_spring_proximal_joint = all_joint_names[13]
-    hand_l_distal_joint = all_joint_names[14]
-    hand_r_proximal_joint = all_joint_names[15]
-    hand_r_spring_proximal_joint = all_joint_names[16]
-    hand_r_distal_joint = all_joint_names[17]
 
 class HsrPybulletEnv(gym.Env):
     def __init__(self) -> None:
@@ -261,20 +221,24 @@ class HsrPybulletEnv(gym.Env):
         self.robot_body_unique_id.torque_control = torque_control
 
         self.num_joints = self.robot_body_unique_id.num_joints   # 50
-        self.num_dofs = self.robot_body_unique_id.num_dofs       # 18
+        self.num_dofs = self.robot_body_unique_id.num_dofs       # 20
         self.num_dofs_actuated = 3   # only the first 3 joints [joint_x, joint_y, joint_rz]
+        if self.num_dofs_actuated > self.num_dofs:
+            print(f"{Color.Red.value}No. of actuated dofs {self.num_dofs_actuated} cannot be greater than robot's dofs {self.num_dofs}, clamping it{Color.Color_Off.value}")
+            self.num_dofs_actuated = self.num_dofs
 
+        self.joint_names = [x.decode('utf-8') for x in self.robot_body_unique_id.get_joint_infos()["joint_name"]]
         self.free_joint_indices = self.robot_body_unique_id.free_joint_indices
         self.joint_limits_lower, self.joint_limits_upper = self.get_joint_limits()
         self.joint_max_velocities, self.joint_max_forces = self.get_joint_max_velocities_and_forces()
 
-        self.observation_space_length = 27  # 18 joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
+        self.observation_space_length = self.num_dofs + 2 + 3 + 4  # joint values, 2 base velocities, 3 object position, 4 object orientation (quaternion)
         self.observation_space = self.construct_observation_space()
         self.action_space = self.construct_action_space()
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
         # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
-        self.added_obj_position = (4.0, 6.0, 0)
+        self.added_obj_position = (-8.0, -6.0, 0)
         self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position, verbose=True)
 
         self.camera_thread = threading.Thread(target=self.spin)
@@ -348,7 +312,7 @@ class HsrPybulletEnv(gym.Env):
             new_joint_val = delta + current_val
             action[i] = np.clip(new_joint_val, lower_lim, upper_lim)
             if verbose and (np.abs(action[i] - new_joint_val) > 0.00001):
-                print(f"\t{all_joint_names[i]}: delta = {delta:.4f}, joint value: current = {current_val:.4f}, new = {new_joint_val:.4f}, clipped = {action[i]:.4f}")
+                print(f"\t{self.joint_names[i]}: delta = {delta:.4f}, joint value: current = {current_val:.4f}, new = {new_joint_val:.4f}, clipped = {action[i]:.4f}")
         action = np.append(action, current_joint_values[self.num_dofs_actuated:])
 
 
@@ -503,7 +467,7 @@ class HsrPybulletEnv(gym.Env):
                 joint_value = deepcopy(obs["joint_values"][i])
                 obs["joint_values"][i] = np.interp(obs["joint_values"][i], (self.joint_limits_lower[i], self.joint_limits_upper[i]), (-1.0, 1.0))
                 if verbose:
-                    print(f"\t{all_joint_names[i]}: {joint_value:.4f} --> %.4f" % obs["joint_values"][i])
+                    print(f"\t{self.joint_names[i]}: {joint_value:.4f} --> %.4f" % obs["joint_values"][i])
 
         if verbose:
             print("OBSERVATION:")
@@ -578,8 +542,8 @@ class HsrPybulletEnv(gym.Env):
 
     def construct_observation_space(self, verbose=False):
         """
-        Observation space will have a total of 27 elements (see observation_template):
-        - 18 joint values
+        Observation space will have a total of 29 elements (see observation_template):
+        - 20 joint values
         - 2 base velocity X and Y components
         - 3 object position XYZ
         - 4 object orientation (quaternion XYZW)
@@ -720,11 +684,13 @@ class HsrPybulletEnv(gym.Env):
         action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, line_to_xyz, lineColorRGB=[1, 0, 0], lineWidth=5.0)
         ideal_action_line_id = self.bullet_client.addUserDebugLine(line_from_xyz, object_position_xyz, lineColorRGB=[0, 1, 0], lineWidth=5.0)
         vec_action_line = np.array(line_to_xyz) - np.array(line_from_xyz)
-        vec_action_line = vec_action_line / np.linalg.norm(vec_action_line)
+        vec_action_line_magnitude = np.linalg.norm(vec_action_line)
+        vec_action_line = vec_action_line / vec_action_line_magnitude
         vec_ideal_action_line = np.array(object_position_xyz) - np.array(line_from_xyz)
         vec_ideal_action_line = vec_ideal_action_line / np.linalg.norm(vec_ideal_action_line)
         self.approach_vector_dot_product = np.dot(vec_action_line, vec_ideal_action_line)
 
+        print(f"\tAction distance = {vec_action_line_magnitude:.4f}m")
         self.bullet_client.setJointMotorControlArray(
             bodyUniqueId=self.robot_body_unique_id.id,
             jointIndices=self.free_joint_indices,
@@ -765,8 +731,8 @@ class HsrPybulletEnv(gym.Env):
                 print(f"\tBase pose: {self.get_base_position_xy()}, velocity: {self.get_base_velocity()}, base error: {self.get_base_error(q, self.get_joint_values()):.4f}, all joint error: {error}")
                 current_joint_values = self.get_joint_values()
                 print(f"\tJoint values:")
-                for i in range(len(all_joint_names)):
-                    print(f"\t\t{all_joint_names[i]}: {current_joint_values[i]:.4f} (target: {q[i]:.4f}, error: {q[i] - current_joint_values[i]:.4f})")
+                for i in range(len(self.joint_names)):
+                    print(f"\t\t{self.joint_names[i]}: {current_joint_values[i]:.4f} (target: {q[i]:.4f}, error: {q[i] - current_joint_values[i]:.4f})")
 
             # time.sleep(0.01)
             self.bullet_client.stepSimulation()   # already running in a parallel thread that's executing self.spin()
@@ -911,12 +877,12 @@ class HsrPybulletEnv(gym.Env):
         """
 
         if ignore_hand_joints:
-            return np.linalg.norm(q1[:-4] - q2[:-4])   # order of q is the same as all_joint_names
+            return np.linalg.norm(q1[:-4] - q2[:-4])   # order of q is the same as self.joint_names
         else:
-            return np.linalg.norm(q1 - q2)   # order of q is the same as all_joint_names
+            return np.linalg.norm(q1 - q2)   # order of q is the same as self.joint_names
 
     def get_base_error(self, q1, q2):
-        return np.linalg.norm(q1[:3] - q2[:3])   # order of q is the same as all_joint_names
+        return np.linalg.norm(q1[:3] - q2[:3])   # order of q is the same as self.joint_names
 
     def spin(self):
         while self.keep_alive_camera_thread:
@@ -944,7 +910,7 @@ class HsrPybulletEnv(gym.Env):
         title = tab_indent_str + title
         print(title)
         tab_indent_str += "\t"
-        for name, value in zip(all_joint_names, q):
+        for name, value in zip(self.joint_names, q):
             print(f"{tab_indent_str}{name}: {value:.4f}")
 
     def print_pose(self, position_xyz, quaternion_xyzw=None, title=None, tab_indent=0):
@@ -1028,7 +994,7 @@ class HsrPybulletEnv(gym.Env):
 
         if verbose:
             print("Joint limits:")
-            for name, lower, upper in zip(all_joint_names, joint_lower_limits, joint_upper_limits):
+            for name, lower, upper in zip(self.joint_names, joint_lower_limits, joint_upper_limits):
                 print(f"\t{name}: [{lower}, {upper}]")
 
         return joint_lower_limits, joint_upper_limits
@@ -1391,7 +1357,7 @@ if __name__ == "__main__":
     print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
     env.time_of_big_bang = time.time()
     env.training_mode = True
-    timesteps = 2e4   # ends up being 20,480 timesteps (probably related to https://github.com/DLR-RM/stable-baselines3/issues/1150)
+    timesteps = 2e4   # might take more timesteps (probably related to https://github.com/DLR-RM/stable-baselines3/issues/1150)
     model.learn(total_timesteps=int(timesteps), callback=callback, progress_bar=True)
     print(f"Saving model to {saved_model_name}")
     model.save(saved_model_name)
