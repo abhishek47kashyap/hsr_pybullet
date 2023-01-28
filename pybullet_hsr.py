@@ -21,15 +21,27 @@ def get_joint_limits(robot_body_unique_id, verbose=False):
     joint_upper_limits = joint_infos["joint_upper_limit"]
     joint_types = joint_infos["joint_type"]
     joint_indices = joint_infos["joint_index"]
+    joint_damping = joint_infos["joint_dampling"]
+    joint_friction = joint_infos["joint_friction"]
+    joint_max_force = joint_infos["joint_max_force"]
+    joint_max_velocity = joint_infos["joint_max_velocity"]
+
+    # override limits of these joints to [0, 0.7]
+    joint_limits_override = ["hand_l_proximal_joint", "hand_r_proximal_joint"]
 
     if verbose:
-        headers = ["Joint idx", f"Name ({robot_body_unique_id.num_dofs})", "Lower", "Upper", "Type", "Type2"]
+        headers = ["Joint idx", f"Name ({robot_body_unique_id.num_dofs})", "Lower", "Upper", "Type", "Type2", "Damping", "Friction", "Max. Force", "Max. Vel."]
         data = []
-        for idx, name, lower, upper, joint_type in zip(joint_indices, joint_names, joint_lower_limits, joint_upper_limits, joint_types):
+        for i, (idx, name, lower, upper, joint_type, damping, friction, max_force, max_vel) in enumerate(zip(joint_indices, joint_names, joint_lower_limits, joint_upper_limits, joint_types, joint_damping, joint_friction, joint_max_force, joint_max_velocity)):
             jtype_str = "prismatic" if joint_type == 1 else "revolute"
-            data.append([idx, name, lower, upper, jtype_str, joint_type])
+            if name in joint_limits_override:
+                lower = 0.0
+                upper = 0.7
+                joint_lower_limits[i] = deepcopy(lower)
+                joint_upper_limits[i] = deepcopy(upper)
+            data.append([idx, name, lower, upper, jtype_str, joint_type, damping, friction, max_force, max_vel])
 
-        table = clm(data, headers, no_borders=True, justify=['c', 'l', 'c', 'c', 'l', 'c'])
+        table = clm(data, headers, no_borders=True, justify=['c', 'l', 'c', 'c', 'l', 'c', 'c', 'c', 'c', 'c'])
         print(table)
 
     return joint_names, joint_lower_limits, joint_upper_limits
