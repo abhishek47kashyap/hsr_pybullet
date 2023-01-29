@@ -41,8 +41,12 @@ def get_joint_limits(robot_body_unique_id, verbose=False):
                 joint_upper_limits[i] = deepcopy(upper)
             data.append([idx, name, lower, upper, jtype_str, joint_type, damping, friction, max_force, max_vel])
 
-        table = clm(data, headers, no_borders=True, justify=['c', 'l', 'c', 'c', 'l', 'c', 'c', 'c', 'c', 'c'])
-        print(table)
+        try:
+            table = clm(data, headers, no_borders=True, justify=['c', 'l', 'c', 'c', 'l', 'c', 'c', 'c', 'c', 'c'])
+        except Exception as e:
+            print(f"Cannot create table: {e}")
+        else:
+            print(table)
 
     return joint_names, joint_lower_limits, joint_upper_limits
 
@@ -89,7 +93,7 @@ def set_joint_positions(bullet_client, robot_body_unique_id, joint_positions, jo
                     )
 
 def main():
-    urdf_file_path = "hsrb_description/robots/hsrb.urdf"
+    urdf_file_path = "hsrb_description/robots/hsrb4s.urdf"  # _TRI and _installed cannot be loaded, _reference gives a segfault
     use_fixed_base = True
     connection_mode = p.GUI
 
