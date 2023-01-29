@@ -1313,9 +1313,9 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </collision>
   </link>
-  <joint name="hand_motor_joint" type="revolute">
+  <joint name="hand_motor_joint" type="fixed">
     <axis xyz="1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-0.798" upper="1.24" velocity="1.0"/>
+    <limit effort="1000.0" lower="0" upper="1.24" velocity="1.0"/>
     <parent link="hand_palm_link"/>
     <child link="hand_motor_dummy_link"/>
     <dynamics damping="0.0001"/>
@@ -1329,7 +1329,7 @@ POSSIBILITY OF SUCH DAMAGE.
   <joint name="hand_l_proximal_joint" type="revolute">
     <origin rpy="0.0 0.0 0.0" xyz="-0.01675 -0.0245 -0.0175"/>
     <axis xyz="1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-0.798" upper="1.24" velocity="1.0"/>
+    <limit effort="100.0" lower="0" upper="0.7" velocity="1.0"/>
     <parent link="hand_palm_link"/>
     <child link="hand_l_proximal_link"/>
     <mimic joint="hand_motor_joint"/>
@@ -1341,9 +1341,9 @@ POSSIBILITY OF SUCH DAMAGE.
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
   </link>
-  <joint name="hand_l_spring_proximal_joint" type="revolute">
+  <joint name="hand_l_spring_proximal_joint" type="fixed">
     <axis xyz="1.0 0.0 0.0"/>
-    <limit effort="10.0" lower="0.0" upper="0.698" velocity="1.0"/>
+    <limit effort="1.0" lower="0.0" upper="0.698" velocity="1.0"/>
     <parent link="hand_l_proximal_link"/>
     <child link="hand_l_spring_proximal_link"/>
     <dynamics damping="0.0001"/>
@@ -1365,7 +1365,7 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </collision>
   </link>
-  <joint name="hand_l_mimic_distal_joint" type="revolute">
+  <joint name="hand_l_mimic_distal_joint" type="fixed">
     <origin xyz="0.0 0.0 0.07"/>
     <axis xyz="1.0 0.0 0.0"/>
     <limit effort="100.0" lower="-0.698" upper="-0.0" velocity="1.0"/>
@@ -1380,7 +1380,7 @@ POSSIBILITY OF SUCH DAMAGE.
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
   </link>
-  <joint name="hand_l_distal_joint" type="revolute">
+  <joint name="hand_l_distal_joint" type="fixed">
     <axis xyz="1.0 0.0 0.0"/>
     <limit effort="100.0" lower="-1.24" upper="0.798" velocity="1.0"/>
     <parent link="hand_l_mimic_distal_link"/>
@@ -1438,7 +1438,7 @@ POSSIBILITY OF SUCH DAMAGE.
   <joint name="hand_r_proximal_joint" type="revolute">
     <origin rpy="0.0 0.0 0.0" xyz="-0.01675 0.0245 -0.0175"/>
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-0.798" upper="1.24" velocity="1.0"/>
+    <limit effort="100.0" lower="0" upper="0.7" velocity="1.0"/>
     <parent link="hand_palm_link"/>
     <child link="hand_r_proximal_link"/>
     <mimic joint="hand_motor_joint"/>
@@ -1450,9 +1450,9 @@ POSSIBILITY OF SUCH DAMAGE.
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
   </link>
-  <joint name="hand_r_spring_proximal_joint" type="revolute">
+  <joint name="hand_r_spring_proximal_joint" type="fixed">
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="10.0" lower="0.0" upper="0.698" velocity="1.0"/>
+    <limit effort="1.0" lower="0.0" upper="0.698" velocity="1.0"/>
     <parent link="hand_r_proximal_link"/>
     <child link="hand_r_spring_proximal_link"/>
     <dynamics damping="0.0001"/>
@@ -1474,10 +1474,10 @@ POSSIBILITY OF SUCH DAMAGE.
       </geometry>
     </collision>
   </link>
-  <joint name="hand_r_mimic_distal_joint" type="revolute">
+  <joint name="hand_r_mimic_distal_joint" type="fixed">
     <origin xyz="0.0 0.0 0.07"/>
     <axis xyz="-1.0 0.0 0.0"/>
-    <limit effort="100.0" lower="-0.698" upper="-0.0" velocity="1.0"/>
+    <limit effort="100.0" lower="-0.698" upper="-0.0" velocity="5.0"/>
     <parent link="hand_r_spring_proximal_link"/>
     <child link="hand_r_mimic_distal_link"/>
     <mimic joint="hand_r_spring_proximal_joint" multiplier="-1.0"/>
@@ -1489,7 +1489,7 @@ POSSIBILITY OF SUCH DAMAGE.
       <inertia ixx="0.0015" ixy="0.0" ixz="0.0" iyy="0.0015" iyz="0.0" izz="0.0015"/>
     </inertial>
   </link>
-  <joint name="hand_r_distal_joint" type="revolute">
+  <joint name="hand_r_distal_joint" type="fixed">
     <axis xyz="-1.0 0.0 0.0"/>
     <limit effort="100.0" lower="-1.24" upper="0.798" velocity="1.0"/>
     <parent link="hand_r_mimic_distal_link"/>
