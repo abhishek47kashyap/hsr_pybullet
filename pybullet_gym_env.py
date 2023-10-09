@@ -41,7 +41,7 @@ import pybullet_data
 import pybullet_utils.bullet_client as bc
 import pybulletX as px
 
-from stable_baselines3 import PPO, A2C
+from stable_baselines3 import PPO, A2C, SAC
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
@@ -237,9 +237,9 @@ class HsrPybulletEnv(gym.Env):
         self.action_space = self.construct_action_space()
         self.exit_setting_joint_position = threading.Event()      # https://stackoverflow.com/a/46346184
 
-        # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
-        self.added_obj_position = (-8.0, -6.0, 0)
-        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position, verbose=True)
+        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name)
+        # self.added_obj_position = (-8.0, -6.0, 0)
+        # self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position, verbose=True)
 
         self.camera_thread = threading.Thread(target=self.spin)
         self.keep_alive_camera_thread = True
@@ -751,8 +751,8 @@ class HsrPybulletEnv(gym.Env):
 
         self.robot_body_unique_id.reset()
 
-        # self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
-        self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position)
+        self.added_obj_id = self.spawn_object_at_random_location(model_name=self.object_model_name, verbose=verbose)
+        # self.added_obj_id = self.add_object_to_scene(model_name=self.object_model_name, base_position=self.added_obj_position)
 
         self.done = False
         self.previous_proximity_to_object = self.calculate_base_proximity_to_object(verbose=verbose)
@@ -1329,62 +1329,64 @@ if __name__ == "__main__":
     #         obs = env.reset()
 
     # RL
-    saved_model_name = "ppo_approaching_object_" + str(datetime.datetime.now(pytz.timezone("Japan")))
-    log_dir = "/root/HSR/hsr_pybullet/sb3_logs/"
-    os.makedirs(log_dir, exist_ok=True)
-    env = Monitor(env, log_dir)
-    callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir, model_name=saved_model_name)
-    model = PPO('MlpPolicy', env, verbose=1)
+    # save_dir = "/root/HSR/hsr_pybullet/sac_approaching_object_" + str(datetime.datetime.now(pytz.timezone("Japan")))
+    # saved_model_name = os.path.join(save_dir, "model")
+    # log_dir = os.path.join(save_dir, "logs")
+    # os.makedirs(log_dir, exist_ok=True)
+    # env = Monitor(env, log_dir)
+    # callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir, model_name=saved_model_name)
+    # model = SAC('MlpPolicy', env, verbose=1)
 
-    def on_exit():
-        try:
-            model.save(saved_model_name)
-        except Exception as e:
-            print(f"{Color.Red.value}Keyboard interrupt, model COULD NOT BE SAVED{Color.Color_Off.value}")
-        else:
-            print(f"{Color.Cyan.value}Keyboard interrupt, model saved as name {saved_model_name}{Color.Color_Off.value}")
-        finally:
-            print(f"{Color.Cyan.value}Keyboard interrupt, attempting to shutdown sim. environment...{Color.Color_Off.value}")
-            env.close()
-            print(f"{Color.Cyan.value}Keyboard interrupt, sim. environment shutdown{Color.Color_Off.value}")
+    # def on_exit():
+    #     try:
+    #         model.save(saved_model_name)
+    #     except Exception as e:
+    #         print(f"{Color.Red.value}Keyboard interrupt, model COULD NOT BE SAVED{Color.Color_Off.value}")
+    #     else:
+    #         print(f"{Color.Cyan.value}Keyboard interrupt, model saved as name {saved_model_name}{Color.Color_Off.value}")
+    #     finally:
+    #         print(f"{Color.Cyan.value}Keyboard interrupt, attempting to shutdown sim. environment...{Color.Color_Off.value}")
+    #         env.close()
+    #         print(f"{Color.Cyan.value}Keyboard interrupt, sim. environment shutdown{Color.Color_Off.value}")
 
     # atexit.register(on_exit)
 
-    # print(f"------------> Before training...")
-    # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
-    # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
+    # # print(f"------------> Before training...")
+    # # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
+    # # print(f"------------> Before training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-    print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
-    env.time_of_big_bang = time.time()
-    env.training_mode = True
-    timesteps = 2e4   # might take more timesteps (probably related to https://github.com/DLR-RM/stable-baselines3/issues/1150)
-    model.learn(total_timesteps=int(timesteps), callback=callback, progress_bar=True)
-    print(f"Saving model to {saved_model_name}")
-    model.save(saved_model_name)
-    print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
-    env.training_mode = False
-    atexit.unregister(on_exit)
-    env.close()
+    # print(f"{Color.Cyan.value}Beginning to train..{Color.Color_Off.value}")
+    # env.time_of_big_bang = time.time()
+    # env.training_mode = True
+    # timesteps = 2e4   # might take more timesteps (probably related to https://github.com/DLR-RM/stable-baselines3/issues/1150)
+    # model.learn(total_timesteps=int(timesteps), callback=callback, progress_bar=True)
+    # print(f"Saving model to {saved_model_name}")
+    # model.save(saved_model_name)
+    # print(f"{Color.Cyan.value}Training completed, model saved as name {saved_model_name}{Color.Color_Off.value}")
+    # env.training_mode = False
+    # atexit.unregister(on_exit)
+    # env.close()
 
-    results_plotter.plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "HSR PyBullet")
+    # results_plotter.plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "HSR PyBullet")
 
-    plot_results(log_dir)
+    # plot_results(log_dir)
 
     # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     # print(f"------------> After training: mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
     # del model
 
-    # saved_model_name = ""   # populate this
-    # if not file_exists(saved_model_name):
-    #     print(f"{Color.Red.value}No saved model found by the name \'{saved_model_name}\'{Color.Color_Off.value}")
-    #     sys.exit()
+    saved_model_name = "/root/HSR/hsr_pybullet/sac_approaching_object_2023-09-25 22:15:13.209290+09:00/model"   # populate this
+    if not file_exists(saved_model_name):
+        print(f"{Color.Red.value}No saved model found by the name \'{saved_model_name}\'{Color.Color_Off.value}")
+        sys.exit()
     # model = PPO.load(saved_model_name, print_system_info=True)
+    model = SAC.load(saved_model_name, print_system_info=True)
 
-    # obs = env.reset()
-    # while True:
-    #     action, _state = model.predict(obs, deterministic=True)
-    #     obs, reward, done, info = env.step(action)
-    #     env.render()
-    #     if done:
-    #         obs = env.reset()
+    obs = env.reset()
+    while True:
+        action, _state = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        env.render()
+        if done:
+            obs = env.reset()
