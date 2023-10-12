@@ -1073,7 +1073,7 @@ class HsrPybulletEnv(gym.Env):
 
         return list(q)
 
-    def calculate_forward_kinematics(self, q, verbose=False):
+    def calculate_forward_kinematics(self, joint_config, verbose=False):
         """
         Ref: https://github.com/bulletphysics/bullet3/issues/2603
                 "create a second DIRECT pybullet connection, load the arm there, reset it to the angles,
@@ -1082,11 +1082,11 @@ class HsrPybulletEnv(gym.Env):
         For creating a second connection, refer to https://github.com/bulletphysics/bullet3/issues/1925#issuecomment-428355937
         """
 
-        if len(q) != self.num_dofs:
-            raise ValueError(f"calculate_forward_kinematics(): q has {len(q)} values but robot has {self.num_dofs} DOF")
+        if len(joint_config) != self.num_dofs:
+            raise ValueError(f"calculate_forward_kinematics(): input joint_config has {len(joint_config)} values but robot has {self.num_dofs} DOF")
 
         if verbose:
-            self.print_joint_values(q, title="Calculating FK for:")
+            self.print_joint_values(joint_config, title="Calculating FK for:")
 
         throwaway_client = bc.BulletClient(connection_mode=p.DIRECT)
 
@@ -1102,11 +1102,20 @@ class HsrPybulletEnv(gym.Env):
             flags=p.URDF_USE_SELF_COLLISION
         )
 
+        # This does seem to provide correct forward kinematics, BUT HOW, considering throwaway_client has not been set to the joint configuration 'q'
+        # throwaway_client.setJointMotorControlArray(
+        #     bodyIndex=throwaway_robot_body_unique_id,
+        #     jointIndices=self.free_joint_indices,
+        #     controlMode=p.POSITION_CONTROL,
+        #     forces=np.zeros(self.num_dofs),
+        # )
+
         throwaway_client.setJointMotorControlArray(
-            bodyIndex=throwaway_robot_body_unique_id,
+            bodyUniqueId=throwaway_robot_body_unique_id,
             jointIndices=self.free_joint_indices,
             controlMode=p.POSITION_CONTROL,
-            forces=np.zeros(self.num_dofs),
+            targetPositions=joint_config,
+            targetVelocities=np.zeros_like(joint_config)
         )
 
         gripper_state = throwaway_client.getLinkState(
